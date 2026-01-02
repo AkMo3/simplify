@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/AkMo3/simplify/internal/container"
+	"github.com/AkMo3/simplify/internal/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -36,23 +38,39 @@ func init() {
 }
 
 func runContainer(cmd *cobra.Command, args []string) error {
-	client, err := container.NewClient()
+	// Create context with operation ID
+	ctx := logger.WithOperationID(context.Background())
+
+	logger.InfoCtx(ctx, "Running container", "name", containerName, "image", "imageName")
+
+	client, err := container.NewClient(ctx)
 
 	if err != nil {
+		logger.ErrorCtx(ctx, "Failed to connect to Podman", "error", err)
 		return fmt.Errorf("faild to connect to Podman: %w", err)
 	}
 
 	ports, err := parsePorts(portMappings)
 	if err != nil {
+		logger.ErrorCtx(ctx, "Invalid port mapping", "error", err)
 		return err
 	}
 
-	id, err := client.Run(containerName, imageName, ports, envVars)
+	logger.DebugCtx(ctx, "Parsed configuration",
+		"ports", ports,
+		"env_count", len(envVars),
+	)
+
+	id, err := client.Run(ctx, containerName, imageName, ports, envVars)
 	if err != nil {
+		logger.ErrorCtx(ctx, "Failed to run container", "error", err)
 		return fmt.Errorf("failed to run container: %w", err)
 	}
 
-	fmt.Printf("Container %s started: %s\n", containerName, id[:12])
+	logger.InfoCtx(ctx, "Container started",
+		"name", containerName,
+		"id", id[:12],
+	)
 
 	return nil
 }

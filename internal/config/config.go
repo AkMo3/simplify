@@ -96,7 +96,7 @@ func ensureConfigExists(configPath string) error {
 	defaultConfig := []byte(`# Simplify configuration
 # Environment: development | production
 env: development
-	`)
+`)
 
 	if err := os.WriteFile(configPath, defaultConfig, 0644); err != nil {
 		return fmt.Errorf("writing default config: %w", err)

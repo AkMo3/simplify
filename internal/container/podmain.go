@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/AkMo3/simplify/internal/logger"
 	"github.com/containers/podman/v5/pkg/bindings"
 	"github.com/containers/podman/v5/pkg/bindings/containers"
 	"github.com/containers/podman/v5/pkg/bindings/images"
@@ -20,14 +21,17 @@ type Client struct {
 
 /* Public Static Functions */
 
-func NewClient() (*Client, error) {
+func NewClient(ctx context.Context) (*Client, error) {
+	logger.DebugCtx(ctx, "Connecting to Podman socket")
+
 	socketPath := getSocketPath()
-	ctx, err := bindings.NewConnection(context.Background(), socketPath)
+	ctx, err := bindings.NewConnection(ctx, socketPath)
 
 	if err != nil {
 		return nil, fmt.Errorf("connecting to podman: %w", err)
 	}
 
+	logger.DebugCtx(ctx, "Connected to Podman", "socket", socketPath)
 	return &Client{ctx: ctx}, nil
 }
 
@@ -39,7 +43,8 @@ func (c *Client) Context() context.Context {
 }
 
 // Run creates and starts a container
-func (c *Client) Run(name, image string, ports map[uint16]uint16, env []string) (string, error) {
+func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string) (string, error) {
+	logger.DebugCtx(ctx, "Checking if image exists", "image", image)
 
 	// Pull image if not needed
 	exists, err := images.Exists(c.ctx, image, nil)
@@ -48,11 +53,12 @@ func (c *Client) Run(name, image string, ports map[uint16]uint16, env []string) 
 	}
 
 	if !exists {
-		fmt.Printf("Pulling image %s...\n", image)
+		logger.InfoCtx(ctx, "Pulling image", "image", image)
 		_, err = images.Pull(c.ctx, image, nil)
 		if err != nil {
 			return "", fmt.Errorf("pulling image: %w", err)
 		}
+		logger.DebugCtx(ctx, "Image pulled successfully", "image", image)
 	}
 
 	// Create spec
@@ -63,27 +69,38 @@ func (c *Client) Run(name, image string, ports map[uint16]uint16, env []string) 
 	if len(ports) > 0 {
 		s.PortMappings = make([]nettypes.PortMapping, 0, len(ports))
 		for hostPort, containerPort := range ports {
-			fmt.Printf("Adding port mapping (hostPort %d:containerPort %d)\n", hostPort, containerPort)
+			logger.DebugCtx(ctx, "Adding port mapping",
+				"host_port", hostPort,
+				"container_port", containerPort,
+			)
 			s.PortMappings = append(s.PortMappings, nettypes.PortMapping{
+				HostIP:        "127.0.0.1",
 				HostPort:      hostPort,
 				ContainerPort: containerPort,
 				Protocol:      "tcp",
 			})
 		}
 	} else {
-		fmt.Printf("No port mappings provided\n")
+		logger.DebugCtx(ctx, "No port mappings provided")
 	}
 
 	// Create container
+	logger.DebugCtx(ctx, "Creating container", "name", name)
 	createResponse, err := containers.CreateWithSpec(c.ctx, s, nil)
 	if err != nil {
 		return "", fmt.Errorf("creating container: %w", err)
 	}
 
 	// Start container
+	logger.DebugCtx(ctx, "Starting container", "id", createResponse.ID[:12])
 	if err := containers.Start(c.ctx, createResponse.ID, nil); err != nil {
 		return "", fmt.Errorf("starting container: %w", err)
 	}
+
+	logger.InfoCtx(ctx, "Container running",
+		"name", name,
+		"id", createResponse.ID[:12],
+	)
 
 	return createResponse.ID, nil
 
