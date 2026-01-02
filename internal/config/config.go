@@ -1,3 +1,4 @@
+// Package config handles application configuration loading and management.
 package config
 
 import (
@@ -27,16 +28,21 @@ func Load(configPath string) error {
 		configPath = DefaultConfigPath
 	}
 
+	// Reset viper for testing
+	viper.Reset()
+
 	// Create default config if it doesn't exist
 	if err := ensureConfigExists(configPath); err != nil {
-		return fmt.Errorf("ensuring config exists :%w", err)
+		return fmt.Errorf("ensuring config exists: %w", err)
 	}
 
 	viper.SetConfigFile(configPath)
 	viper.SetConfigType("yaml")
 
 	// Bind environment variables
-	viper.BindEnv("env", "ENV")
+	if err := viper.BindEnv("env", "ENV"); err != nil {
+		return fmt.Errorf("binding env variable: %w", err)
+	}
 
 	// Set defaults
 	viper.SetDefault("env", EnvDevelopment)
@@ -53,7 +59,8 @@ func Load(configPath string) error {
 
 	// Validate env value
 	if globalConfig.Env != EnvDevelopment && globalConfig.Env != EnvProduction {
-		return fmt.Errorf("invalid env value %q: must be %q or %q", globalConfig.Env, EnvDevelopment, EnvProduction)
+		return fmt.Errorf("invalid env value %q: must be %q or %q",
+			globalConfig.Env, EnvDevelopment, EnvProduction)
 	}
 
 	return nil
@@ -62,10 +69,9 @@ func Load(configPath string) error {
 // Get returns the global configuration
 func Get() *Config {
 	if globalConfig == nil {
-		// Return default config if not laoded
+		// Return default config if not loaded
 		return &Config{Env: EnvDevelopment}
 	}
-
 	return globalConfig
 }
 
@@ -74,7 +80,7 @@ func IsDevelopment() bool {
 	return Get().Env == EnvDevelopment
 }
 
-// IsProduction returns true if running in development mode
+// IsProduction returns true if running in production mode
 func IsProduction() bool {
 	return Get().Env == EnvProduction
 }
@@ -88,20 +94,19 @@ func ensureConfigExists(configPath string) error {
 
 	// Create directory if needed
 	dir := filepath.Dir(configPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating config directory %s: %w", dir, err)
 	}
 
-	// Create default config
-	defaultConfig := []byte(`# Simplify configuration
+	// Create default config (0o600 for security - may contain secrets later)
+	defaultConfig := []byte(`# Simplify Configuration
 # Environment: development | production
 env: development
 `)
 
-	if err := os.WriteFile(configPath, defaultConfig, 0644); err != nil {
+	if err := os.WriteFile(configPath, defaultConfig, 0o600); err != nil {
 		return fmt.Errorf("writing default config: %w", err)
 	}
 
-	fmt.Printf("Created default config at %s\n", configPath)
 	return nil
 }

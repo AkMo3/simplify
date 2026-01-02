@@ -65,7 +65,7 @@ func getContainerLogs(cmd *cobra.Command, args []string) error {
 
 	if err := client.Logs(ctx, name, followLogs, tailLines); err != nil {
 		if ctx.Err() != nil {
-			// User cancelled with Ctrl+C
+			// User canceled with Ctrl+C
 			return nil
 		}
 		logger.ErrorCtx(ctx, "Failed to get logs", "name", name, "error", err)

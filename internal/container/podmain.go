@@ -1,3 +1,4 @@
+// Package container provides container management operations using Podman.
 package container
 
 import (
@@ -15,7 +16,7 @@ import (
 	nettypes "go.podman.io/common/libnetwork/types"
 )
 
-/* Type definations */
+/* Type definitions */
 
 type Client struct {
 	ctx context.Context
@@ -23,12 +24,12 @@ type Client struct {
 
 // ContainerInfo holds container information for listing
 type ContainerInfo struct {
+	Created time.Time
 	ID      string
 	Name    string
 	Image   string
 	Status  string
 	Ports   string
-	Created time.Time
 }
 
 /* Public Static Functions */
@@ -38,7 +39,6 @@ func NewClient(ctx context.Context) (*Client, error) {
 
 	socketPath := getSocketPath()
 	ctx, err := bindings.NewConnection(ctx, socketPath)
-
 	if err != nil {
 		return nil, fmt.Errorf("connecting to podman: %w", err)
 	}
@@ -152,8 +152,10 @@ func (c *Client) List(ctx context.Context, all bool) ([]ContainerInfo, error) {
 	}
 
 	result := make([]ContainerInfo, 0, len(listContainers))
-	for _, ctr := range listContainers {
+	for i := range listContainers {
 		name := ""
+		ctr := &listContainers[i]
+
 		if len(ctr.Names) > 0 {
 			name = ctr.Names[0]
 		}
@@ -241,7 +243,10 @@ func getSocketPath() string {
 		return "unix://" + sock
 	}
 
-	homeDir, _ := os.UserHomeDir()
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = ""
+	}
 	macSocket := fmt.Sprintf("%s/.local/share/containers/podman/machine/podman.sock", homeDir)
 	if _, err := os.Stat(macSocket); err == nil {
 		return "unix://" + macSocket

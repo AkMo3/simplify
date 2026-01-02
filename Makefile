@@ -1,4 +1,4 @@
-.PHONY: build run test test-unit test-integration test-coverage clean
+.PHONY: build run test test-unit test-integration test-coverage lint fmt clean
 
 BINARY_NAME=simplify
 BUILD_TAGS=remote exclude_graphdriver_btrfs btrfs_noversion exclude_graphdriver_devicemapper containers_image_openpgp
@@ -31,6 +31,34 @@ test-coverage:
 test-race:
 	go test -tags "$(BUILD_TAGS)" -v -race ./...
 
+# Run linter
+lint:
+	@which golangci-lint > /dev/null || (echo "Installing golangci-lint..." && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest)
+	golangci-lint run
+
+# Check formatting
+fmt:
+	@echo "Checking formatting..."
+	@unformatted=$$(gofmt -l .); \
+	if [ -n "$$unformatted" ]; then \
+		echo "The following files need formatting:"; \
+		echo "$$unformatted"; \
+		echo ""; \
+		echo "Run 'make fmt-fix' to fix."; \
+		exit 1; \
+	fi
+	@echo "All files are formatted correctly."
+
+# Fix formatting
+fmt-fix:
+	gofmt -w .
+	@echo "Formatting fixed."
+
+# Run all checks (useful before committing)
+check: fmt lint test-unit
+	@echo "All checks passed!"
+
 clean:
 	rm -rf bin/
 	rm -f coverage.out coverage.html
+

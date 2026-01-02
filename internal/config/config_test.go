@@ -16,7 +16,7 @@ func TestLoad_DefaultConfig(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
 	configContent := `env: development`
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err, "Failed to write test config file")
 
 	// Load the config
@@ -34,7 +34,7 @@ func TestLoad_ProductionConfig(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
 	configContent := `env: production`
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	err = Load(configPath)
@@ -50,7 +50,7 @@ func TestLoad_InvalidEnv(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
 	configContent := `env: invalid`
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	err = Load(configPath)
@@ -65,7 +65,7 @@ func TestLoad_EnvVarOverride(t *testing.T) {
 
 	// Config file says development
 	configContent := `env: development`
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// But ENV var says production
@@ -107,7 +107,7 @@ func TestIsDevelopment(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
 	configContent := `env: development`
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	err = Load(configPath)
@@ -123,7 +123,7 @@ func TestIsProduction(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
 	configContent := `env: production`
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	err = Load(configPath)
@@ -150,7 +150,7 @@ func TestLoad_MalformedYAML(t *testing.T) {
 
 	// Invalid YAML
 	configContent := `env: [invalid yaml`
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	err = Load(configPath)
@@ -163,7 +163,7 @@ func TestLoad_EmptyConfig(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "config.yaml")
 
 	// Empty file
-	err := os.WriteFile(configPath, []byte(""), 0644)
+	err := os.WriteFile(configPath, []byte(""), 0o644)
 	require.NoError(t, err)
 
 	err = Load(configPath)
