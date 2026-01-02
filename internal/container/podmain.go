@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/AkMo3/simplify/internal/logger"
 	"github.com/containers/podman/v5/pkg/bindings"
@@ -17,6 +19,16 @@ import (
 
 type Client struct {
 	ctx context.Context
+}
+
+// ContainerInfo holds container information for listing
+type ContainerInfo struct {
+	ID      string
+	Name    string
+	Image   string
+	Status  string
+	Ports   string
+	Created time.Time
 }
 
 /* Public Static Functions */
@@ -103,7 +115,122 @@ func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]u
 	)
 
 	return createResponse.ID, nil
+}
 
+// Stop stops a running container
+func (c *Client) Stop(ctx context.Context, name string, timeout *uint) error {
+	logger.DebugCtx(ctx, "Stopping container", "name", name)
+
+	if err := containers.Stop(c.ctx, name, &containers.StopOptions{Timeout: timeout}); err != nil {
+		return fmt.Errorf("stopping container: %w", err)
+	}
+
+	logger.InfoCtx(ctx, "Container stopped", "name", name)
+	return nil
+}
+
+// Remove removes a container
+func (c *Client) Remove(ctx context.Context, name string, force bool) error {
+	logger.DebugCtx(ctx, "Removing container", "name", name, "force", force)
+
+	_, err := containers.Remove(c.ctx, name, &containers.RemoveOptions{Force: &force})
+	if err != nil {
+		return fmt.Errorf("removing container: %w", err)
+	}
+
+	logger.InfoCtx(ctx, "Container removed", "name", name)
+	return nil
+}
+
+// List returns containers based on filters
+func (c *Client) List(ctx context.Context, all bool) ([]ContainerInfo, error) {
+	logger.DebugCtx(ctx, "Listing containers", "all", all)
+
+	listContainers, err := containers.List(c.ctx, &containers.ListOptions{All: &all})
+	if err != nil {
+		return nil, fmt.Errorf("listing containers: %w", err)
+	}
+
+	result := make([]ContainerInfo, 0, len(listContainers))
+	for _, ctr := range listContainers {
+		name := ""
+		if len(ctr.Names) > 0 {
+			name = ctr.Names[0]
+		}
+
+		ports := formatPorts(ctr.Ports)
+
+		result = append(result, ContainerInfo{
+			ID:      ctr.ID[:12],
+			Name:    name,
+			Image:   ctr.Image,
+			Status:  ctr.State,
+			Ports:   ports,
+			Created: ctr.Created,
+		})
+	}
+
+	logger.DebugCtx(ctx, "Found containers", "count", len(result))
+	return result, nil
+}
+
+// Logs streams container Logs
+func (c *Client) Logs(ctx context.Context, name string, follow bool, tail string) error {
+	logger.DebugCtx(ctx, "Getting container logs",
+		"name", name,
+		"follow", follow,
+		"tail", tail,
+	)
+
+	stdoutCh := make(chan string)
+	stderrCh := make(chan string)
+
+	opts := &containers.LogOptions{
+		Follow:     &follow,
+		Stdout:     ptrBool(true),
+		Stderr:     ptrBool(true),
+		Timestamps: ptrBool(true),
+	}
+
+	if tail != "" {
+		opts.Tail = &tail
+	}
+
+	go func() {
+		if err := containers.Logs(c.ctx, name, opts, stdoutCh, stderrCh); err != nil {
+			logger.ErrorCtx(ctx, "error streaming logs", "error", err)
+		}
+
+		close(stdoutCh)
+		close(stderrCh)
+	}()
+
+	// Print logs from both channels
+	for {
+		select {
+		case line, ok := <-stdoutCh:
+			if !ok {
+				stdoutCh = nil
+			} else {
+				fmt.Println(line)
+			}
+
+		case line, ok := <-stderrCh:
+			if !ok {
+				stderrCh = nil
+			} else {
+				fmt.Println(line)
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+
+		if stdoutCh == nil && stderrCh == nil {
+			break
+		}
+	}
+
+	return nil
 }
 
 /* Utility Functions */
@@ -136,4 +263,28 @@ func envSliceToMap(env []string) map[string]string {
 	}
 
 	return result
+}
+
+// Helper function to format ports for display
+func formatPorts(ports []nettypes.PortMapping) string {
+	if len(ports) == 0 {
+		return ""
+	}
+
+	var portStrs []string
+	for _, p := range ports {
+		if p.HostPort > 0 {
+			portStrs = append(portStrs, fmt.Sprintf("%s:%d->%d/%s",
+				p.HostIP, p.HostPort, p.ContainerPort, p.Protocol))
+		} else {
+			portStrs = append(portStrs, fmt.Sprintf("%d/%s",
+				p.ContainerPort, p.Protocol))
+		}
+	}
+	return strings.Join(portStrs, ", ")
+}
+
+// Helper to create bool pointer
+func ptrBool(b bool) *bool {
+	return &b
 }

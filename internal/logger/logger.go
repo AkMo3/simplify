@@ -122,51 +122,51 @@ func loggerWithContext(ctx context.Context) *zap.SugaredLogger {
 }
 
 // Debug logs a debug message (development only)
-func Debug(msg string, keysAndValues ...interface{}) {
+func Debug(msg string, keysAndValues ...any) {
 	globalLogger.Debugw(msg, keysAndValues...)
 }
 
 // DebugCtx logs a debug message with context
-func DebugCtx(ctx context.Context, msg string, keysAndValues ...interface{}) {
+func DebugCtx(ctx context.Context, msg string, keysAndValues ...any) {
 	loggerWithContext(ctx).Debugw(msg, keysAndValues...)
 }
 
 // Info logs an info message
-func Info(msg string, keysAndValues ...interface{}) {
+func Info(msg string, keysAndValues ...any) {
 	globalLogger.Infow(msg, keysAndValues...)
 }
 
 // InfoCtx logs an info message with context
-func InfoCtx(ctx context.Context, msg string, keysAndValues ...interface{}) {
+func InfoCtx(ctx context.Context, msg string, keysAndValues ...any) {
 	loggerWithContext(ctx).Infow(msg, keysAndValues...)
 }
 
 // Warn logs a warning message
-func Warn(msg string, keysAndValues ...interface{}) {
+func Warn(msg string, keysAndValues ...any) {
 	globalLogger.Warnw(msg, keysAndValues...)
 }
 
 // WarnCtx logs a warning message with context
-func WarnCtx(ctx context.Context, msg string, keysAndValues ...interface{}) {
+func WarnCtx(ctx context.Context, msg string, keysAndValues ...any) {
 	loggerWithContext(ctx).Warnw(msg, keysAndValues...)
 }
 
 // Error logs an error message
-func Error(msg string, keysAndValues ...interface{}) {
+func Error(msg string, keysAndValues ...any) {
 	globalLogger.Errorw(msg, keysAndValues...)
 }
 
 // ErrorCtx logs an error message with context
-func ErrorCtx(ctx context.Context, msg string, keysAndValues ...interface{}) {
+func ErrorCtx(ctx context.Context, msg string, keysAndValues ...any) {
 	loggerWithContext(ctx).Errorw(msg, keysAndValues...)
 }
 
 // Fatal logs a fatal message and exits
-func Fatal(msg string, keysAndValues ...interface{}) {
+func Fatal(msg string, keysAndValues ...any) {
 	globalLogger.Fatalw(msg, keysAndValues...)
 }
 
 // FatalCtx logs a fatal message with context and exits
-func FatalCtx(ctx context.Context, msg string, keysAndValues ...interface{}) {
+func FatalCtx(ctx context.Context, msg string, keysAndValues ...any) {
 	loggerWithContext(ctx).Fatalw(msg, keysAndValues...)
 }

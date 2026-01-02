@@ -4,8 +4,11 @@ go 1.24.2
 
 require (
 	github.com/containers/podman/v5 v5.7.1
+	github.com/google/uuid v1.6.0
 	github.com/spf13/cobra v1.10.2
+	github.com/spf13/viper v1.21.0
 	go.podman.io/common v0.66.1
+	go.uber.org/zap v1.27.1
 )
 
 require (
@@ -46,7 +49,6 @@ require (
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/go-containerregistry v0.20.6 // indirect
 	github.com/google/go-intervals v0.0.2 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/gorilla/schema v1.4.1 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
@@ -98,7 +100,6 @@ require (
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
-	github.com/spf13/viper v1.21.0 // indirect
 	github.com/stefanberger/go-pkcs11uri v0.0.0-20230803200340-78284954bff6 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/sylabs/sif/v2 v2.22.0 // indirect
@@ -115,7 +116,6 @@ require (
 	go.podman.io/image/v5 v5.38.0 // indirect
 	go.podman.io/storage v1.61.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.1 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.43.0 // indirect
