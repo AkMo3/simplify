@@ -1,8 +1,11 @@
 package cli
 
 import (
+	"github.com/AkMo3/simplify/internal/config"
 	"github.com/spf13/cobra"
 )
+
+var cfgFile string
 
 var rootCmd = &cobra.Command{
 	Use:   "simplify",
@@ -16,5 +19,10 @@ func Execute() error {
 }
 
 func init() {
-	// Global flags will go here
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", config.DefaultConfigPath, "config file path")
+}
+
+// GetConfigPath returns the config file path from flag
+func GetConfigPath() string {
+	return cfgFile
 }
