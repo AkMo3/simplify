@@ -1,3 +1,4 @@
+// Package main is the entry point for the Simplify CLI.
 package main
 
 import (
@@ -10,17 +11,21 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+}
 
+func run() error {
 	// Load configuration
 	if err := config.Load(cli.GetConfigPath()); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	// Initialize logger
 	if err := logger.Init(); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to Initialize logger :%v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to initialize logger: %w", err)
 	}
 	defer logger.Sync()
 
@@ -29,6 +34,8 @@ func main() {
 	// Execute CLI
 	if err := cli.Execute(); err != nil {
 		logger.Error("Command failed", "error", err)
-		os.Exit(1)
+		return err
 	}
+
+	return nil
 }

@@ -33,8 +33,8 @@ func init() {
 	runCmd.Flags().StringSliceVarP(&portMappings, "port", "p", []string{}, "Port Mappings (host:container)")
 	runCmd.Flags().StringSliceVarP(&envVars, "env", "e", []string{}, "Environment variables (KEY=VALUE)")
 
-	runCmd.MarkFlagRequired("name")
-	runCmd.MarkFlagRequired("image")
+	_ = runCmd.MarkFlagRequired("name")  //nolint:errcheck // flag registration rarely fails
+	_ = runCmd.MarkFlagRequired("image") //nolint:errcheck // flag registration rarely fails
 }
 
 func runContainer(cmd *cobra.Command, args []string) error {
@@ -44,7 +44,6 @@ func runContainer(cmd *cobra.Command, args []string) error {
 	logger.InfoCtx(ctx, "Running container", "name", containerName, "image", "imageName")
 
 	client, err := container.NewClient(ctx)
-
 	if err != nil {
 		logger.ErrorCtx(ctx, "Failed to connect to Podman", "error", err)
 		return fmt.Errorf("faild to connect to Podman: %w", err)
@@ -80,14 +79,13 @@ func parsePorts(mappings []string) (map[uint16]uint16, error) {
 	ports := make(map[uint16]uint16)
 
 	for _, m := range mappings {
-		var host, container uint16
-		_, err := fmt.Sscanf(m, "%d:%d", &host, &container)
-
+		var host, containerID uint16
+		_, err := fmt.Sscanf(m, "%d:%d", &host, &containerID)
 		if err != nil {
 			return nil, fmt.Errorf("invalid port mapping %q (use host:container)", m)
 		}
 
-		ports[host] = container
+		ports[host] = containerID
 	}
 
 	return ports, nil

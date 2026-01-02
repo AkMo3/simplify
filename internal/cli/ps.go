@@ -69,11 +69,11 @@ func listContainers(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func truncateString(s string, max int) string {
-	if len(s) <= max {
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
 		return s
 	}
-	return s[:max-3] + "..."
+	return s[:maxLen-3] + "..."
 }
 
 func formatCreatedTime(t time.Time) string {

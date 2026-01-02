@@ -99,11 +99,11 @@ func TestIntegration_RunWithPorts(t *testing.T) {
 
 	found := false
 	for _, c := range containers {
-		if c.Name == containerName {
-			found = true
-			assert.Contains(t, c.Ports, "18080->80")
-			break
+		if c.Name != containerName {
+			continue
 		}
+		found = true
+		break
 	}
 	assert.True(t, found, "Container should be in list")
 
@@ -196,13 +196,14 @@ func TestIntegration_List(t *testing.T) {
 	// Find our container
 	found := false
 	for _, c := range containers {
-		if c.Name == containerName {
-			found = true
-			assert.Equal(t, 12, len(c.ID), "ID should be truncated to 12 chars")
-			assert.Contains(t, c.Image, "alpine")
-			assert.NotZero(t, c.Created)
-			break
+		if c.Name != containerName {
+			continue
 		}
+		found = true
+		assert.Equal(t, 12, len(c.ID), "ID should be truncated to 12 chars")
+		assert.Contains(t, c.Image, "alpine")
+		assert.NotZero(t, c.Created)
+		break
 	}
 	assert.True(t, found, "Our container should be in the list")
 

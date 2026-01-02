@@ -1,3 +1,4 @@
+// Package logger provides structured logging utilities for Simplify.
 package logger
 
 import (
@@ -37,7 +38,7 @@ func Init() error {
 
 // newDevelopmentLogger creates a human-readable logger for development
 func newDevelopmentLogger() (*zap.Logger, error) {
-	encorderConfig := zapcore.EncoderConfig{
+	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:        "time",
 		LevelKey:       "level",
 		NameKey:        "logger",
@@ -52,7 +53,7 @@ func newDevelopmentLogger() (*zap.Logger, error) {
 	}
 
 	core := zapcore.NewCore(
-		zapcore.NewConsoleEncoder(encorderConfig),
+		zapcore.NewConsoleEncoder(encoderConfig),
 		zapcore.AddSync(os.Stdout),
 		zapcore.DebugLevel,
 	)
@@ -88,7 +89,7 @@ func newProductionLogger() (*zap.Logger, error) {
 // Sync flushes any buffered log entries
 func Sync() {
 	if globalLogger != nil {
-		globalLogger.Sync()
+		globalLogger.Sync() //nolint:errcheck // best effort flus
 	}
 }
 
@@ -112,6 +113,10 @@ func OperationIDFromContext(ctx context.Context) string {
 
 // loggerWithContext returns a logger with operation ID if present in context
 func loggerWithContext(ctx context.Context) *zap.SugaredLogger {
+	if globalLogger == nil {
+		// Initialize a default logger if not initialized
+		Init() //nolint:errcheck // fallback initialization
+	}
 	if ctx == nil {
 		return globalLogger
 	}
@@ -123,6 +128,9 @@ func loggerWithContext(ctx context.Context) *zap.SugaredLogger {
 
 // Debug logs a debug message (development only)
 func Debug(msg string, keysAndValues ...any) {
+	if globalLogger == nil {
+		return
+	}
 	globalLogger.Debugw(msg, keysAndValues...)
 }
 
@@ -133,6 +141,9 @@ func DebugCtx(ctx context.Context, msg string, keysAndValues ...any) {
 
 // Info logs an info message
 func Info(msg string, keysAndValues ...any) {
+	if globalLogger == nil {
+		return
+	}
 	globalLogger.Infow(msg, keysAndValues...)
 }
 
@@ -143,6 +154,9 @@ func InfoCtx(ctx context.Context, msg string, keysAndValues ...any) {
 
 // Warn logs a warning message
 func Warn(msg string, keysAndValues ...any) {
+	if globalLogger == nil {
+		return
+	}
 	globalLogger.Warnw(msg, keysAndValues...)
 }
 
@@ -153,6 +167,9 @@ func WarnCtx(ctx context.Context, msg string, keysAndValues ...any) {
 
 // Error logs an error message
 func Error(msg string, keysAndValues ...any) {
+	if globalLogger == nil {
+		return
+	}
 	globalLogger.Errorw(msg, keysAndValues...)
 }
 
@@ -163,6 +180,9 @@ func ErrorCtx(ctx context.Context, msg string, keysAndValues ...any) {
 
 // Fatal logs a fatal message and exits
 func Fatal(msg string, keysAndValues ...any) {
+	if globalLogger == nil {
+		return
+	}
 	globalLogger.Fatalw(msg, keysAndValues...)
 }
 
