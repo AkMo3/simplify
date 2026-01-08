@@ -19,6 +19,11 @@ var globalLogger *zap.SugaredLogger
 
 // Init initializes the global logger based on environment
 func Init() error {
+	if globalLogger != nil {
+		globalLogger.Warn("Logger already initialized")
+		return nil
+	}
+
 	var zapLogger *zap.Logger
 	var err error
 
