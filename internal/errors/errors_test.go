@@ -119,9 +119,9 @@ func TestInternalError(t *testing.T) {
 
 func TestPermissionError(t *testing.T) {
 	t.Run("basic creation", func(t *testing.T) {
-		err := NewPermissionError("/var/lib/simplify", "cannot write to directory")
+		err := NewPermissionErrorWithPath("/var/lib/simplify", "cannot write to directory")
 
-		assert.Equal(t, CodePermission, err.Code)
+		assert.Equal(t, CodePermissionDenied, err.Code)
 		assert.Equal(t, "/var/lib/simplify", err.Path)
 		assert.Contains(t, err.Error(), "PERMISSION_DENIED")
 		assert.Contains(t, err.Error(), "/var/lib/simplify")
@@ -129,14 +129,14 @@ func TestPermissionError(t *testing.T) {
 
 	t.Run("with cause", func(t *testing.T) {
 		cause := fmt.Errorf("operation not permitted")
-		err := NewPermissionErrorWithCause("/etc/simplify", "cannot create directory", cause)
+		err := NewPermissionErrorFull("/etc/simplify", "cannot create directory", cause)
 
 		assert.Equal(t, cause, err.Cause)
 		assert.True(t, errors.Is(err, cause))
 	})
 
 	t.Run("IsPermissionError helper", func(t *testing.T) {
-		err := NewPermissionError("/path", "no access")
+		err := NewPermissionErrorWithPath("/path", "no access")
 		assert.True(t, IsPermissionError(err))
 		assert.False(t, IsNotFound(err))
 	})
@@ -197,8 +197,8 @@ func TestGetErrorCode(t *testing.T) {
 		},
 		{
 			name:     "PermissionError",
-			err:      NewPermissionError("/path", "denied"),
-			expected: CodePermission,
+			err:      NewPermissionErrorWithPath("/path", "denied"),
+			expected: CodePermissionDenied,
 		},
 		{
 			name:     "unknown error returns internal",
@@ -269,7 +269,7 @@ func TestErrorMessages(t *testing.T) {
 	})
 
 	t.Run("PermissionError with path", func(t *testing.T) {
-		err := NewPermissionError("/var/lib/simplify", "cannot create directory")
+		err := NewPermissionErrorWithPath("/var/lib/simplify", "cannot create directory")
 		msg := err.Error()
 
 		assert.Equal(t, "PERMISSION_DENIED: cannot create directory (path=/var/lib/simplify)", msg)

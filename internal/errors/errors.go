@@ -1,4 +1,4 @@
-// Package errors defines project wide custom error definition
+// Package errors provides custom error types for Simplify.
 package errors
 
 import (
@@ -8,20 +8,20 @@ import (
 
 // Error codes for consistent error identification
 const (
-	CodeNotFound      = "NOT_FOUND"
-	CodeAlreadyExists = "ALREADY_EXISTS"
-	CodeInvalidInput  = "INVALID_INPUT"
-	CodeInternal      = "INTERNAL_ERROR"
-	CodePermission    = "PERMISSION_DENIED"
+	CodeNotFound         = "NOT_FOUND"
+	CodeAlreadyExists    = "ALREADY_EXISTS"
+	CodeInvalidInput     = "INVALID_INPUT"
+	CodeInternal         = "INTERNAL_ERROR"
+	CodePermissionDenied = "PERMISSION_DENIED"
 )
 
 // BaseError contains common fields for all custom errors
 type BaseError struct {
-	Cause    error  // Underlying error
-	Code     string // Machine-readable error code
-	Message  string // Human-readable message
-	Resource string // Resource type (e.g., "application", "team")
-	ID       string // Resource identifier
+	Cause    error
+	Code     string
+	Message  string
+	Resource string
+	ID       string
 }
 
 // Error implements the error interface
@@ -163,10 +163,20 @@ type PermissionError struct {
 }
 
 // NewPermissionError creates a new PermissionError
-func NewPermissionError(path, message string) *PermissionError {
+func NewPermissionError(message string) *PermissionError {
 	return &PermissionError{
 		BaseError: BaseError{
-			Code:    CodePermission,
+			Code:    CodePermissionDenied,
+			Message: message,
+		},
+	}
+}
+
+// NewPermissionErrorWithPath creates a PermissionError with path information
+func NewPermissionErrorWithPath(path, message string) *PermissionError {
+	return &PermissionError{
+		BaseError: BaseError{
+			Code:    CodePermissionDenied,
 			Message: message,
 		},
 		Path: path,
@@ -174,10 +184,21 @@ func NewPermissionError(path, message string) *PermissionError {
 }
 
 // NewPermissionErrorWithCause creates a PermissionError with an underlying cause
-func NewPermissionErrorWithCause(path, message string, cause error) *PermissionError {
+func NewPermissionErrorWithCause(message string, cause error) *PermissionError {
 	return &PermissionError{
 		BaseError: BaseError{
-			Code:    CodePermission,
+			Code:    CodePermissionDenied,
+			Message: message,
+			Cause:   cause,
+		},
+	}
+}
+
+// NewPermissionErrorFull creates a PermissionError with path and cause
+func NewPermissionErrorFull(path, message string, cause error) *PermissionError {
+	return &PermissionError{
+		BaseError: BaseError{
+			Code:    CodePermissionDenied,
 			Message: message,
 			Cause:   cause,
 		},

@@ -16,22 +16,22 @@ func EnsureDirectoryExists(path string) error {
 	info, err := os.Stat(path)
 	if err == nil {
 		if !info.IsDir() {
-			return errors.NewPermissionError(path, fmt.Sprintf("path exists but is not a directory: %s", path))
+			return errors.NewPermissionErrorWithPath(path,
+				fmt.Sprintf("path exists but is not a directory: %s", path))
 		}
-
 		return nil
 	}
 
 	// If error is not "not exists", it's likely a permission issue
 	if !os.IsNotExist(err) {
-		return errors.NewPermissionErrorWithCause(path,
+		return errors.NewPermissionErrorFull(path,
 			formatPermissionHelp("access path", path), err)
 	}
 
 	// Try to create the directory
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		if os.IsPermission(err) {
-			return errors.NewPermissionErrorWithCause(path,
+			return errors.NewPermissionErrorFull(path,
 				formatPermissionHelp("create directory", path), err)
 		}
 		return errors.NewInternalErrorWithCause(
@@ -55,7 +55,7 @@ func EnsureDirectoryWritable(path string) error {
 	f, err := os.Create(testFile)
 	if err != nil {
 		if os.IsPermission(err) {
-			return errors.NewPermissionErrorWithCause(path,
+			return errors.NewPermissionErrorFull(path,
 				formatPermissionHelp("write to directory", path), err)
 		}
 		return errors.NewInternalErrorWithCause(
@@ -84,7 +84,7 @@ func CheckReadPermission(path string) error {
 			return errors.NewNotFoundErrorWithCause("path", path, err)
 		}
 		if os.IsPermission(err) {
-			return errors.NewPermissionErrorWithCause(path,
+			return errors.NewPermissionErrorFull(path,
 				formatPermissionHelp("read path", path), err)
 		}
 		return errors.NewInternalErrorWithCause(

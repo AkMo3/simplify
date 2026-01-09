@@ -80,6 +80,10 @@ func genericList[T any](s *Store, bucketName string) ([]T, error) {
 		return nil, err
 	}
 
+	if items == nil {
+		items = make([]T, 0)
+	}
+
 	return items, nil
 }
 
