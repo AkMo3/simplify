@@ -1,14 +1,16 @@
-// Package store provides database operations
+// Package store provides database operations using BoltDB
 package store
 
 import (
 	"fmt"
 	"time"
 
+	"github.com/AkMo3/simplify/internal/errors"
+	"github.com/AkMo3/simplify/internal/permissions"
 	"go.etcd.io/bbolt"
 )
 
-// Bucket names constants to avoid types
+// Bucket names constants to avoid typos
 const (
 	BucketTeams        = "teams"
 	BucketProjects     = "projects"
@@ -21,14 +23,21 @@ type Store struct {
 	db *bbolt.DB
 }
 
-// New creates a new Store and initializes the database buckets
+// New creates a new Store and initializes the database buckets.
+// It ensures the database directory exists and is writable before opening.
 func New(dbPath string) (*Store, error) {
+	// Ensure the database directory exists and is writable
+	if err := permissions.EnsureFileWritable(dbPath); err != nil {
+		return nil, err
+	}
+
 	// Open the database with a 1-second timeout to prevent hanging if locked
 	db, err := bbolt.Open(dbPath, 0o600, &bbolt.Options{
 		Timeout: 1 * time.Second,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to open bolt db: %w", err)
+		return nil, errors.NewInternalErrorWithCause(
+			fmt.Sprintf("failed to open database at %s", dbPath), err)
 	}
 
 	s := &Store{db: db}
@@ -54,7 +63,8 @@ func (s *Store) initBuckets() error {
 
 		for _, bucket := range buckets {
 			if _, err := tx.CreateBucketIfNotExists([]byte(bucket)); err != nil {
-				return fmt.Errorf("failed to create bucket %s: %w", bucket, err)
+				return errors.NewInternalErrorWithCause(
+					fmt.Sprintf("failed to create bucket %s", bucket), err)
 			}
 		}
 
@@ -64,5 +74,23 @@ func (s *Store) initBuckets() error {
 
 // Close ensures the database file is released
 func (s *Store) Close() error {
-	return s.db.Close()
+	if s.db != nil {
+		return s.db.Close()
+	}
+	return nil
+}
+
+// DB returns the underlying BoltDB instance for advanced operations.
+// Use with caution - prefer the typed methods when possible.
+func (s *Store) DB() *bbolt.DB {
+	return s.db
+}
+
+// Ping verifies the database connection is healthy.
+// Used for health checks.
+func (s *Store) Ping() error {
+	return s.db.View(func(tx *bbolt.Tx) error {
+		// Just verify we can start a transaction
+		return nil
+	})
 }

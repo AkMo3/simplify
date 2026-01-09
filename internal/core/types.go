@@ -1,4 +1,4 @@
-// Package core provides all the core functionality
+// Package core provides all the core domain types for Simplify
 package core
 
 import "time"
