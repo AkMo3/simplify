@@ -20,7 +20,6 @@ var globalLogger *zap.SugaredLogger
 // Init initializes the global logger based on environment
 func Init() error {
 	if globalLogger != nil {
-		globalLogger.Warn("Logger already initialized")
 		return nil
 	}
 
@@ -119,7 +118,6 @@ func OperationIDFromContext(ctx context.Context) string {
 // loggerWithContext returns a logger with operation ID if present in context
 func loggerWithContext(ctx context.Context) *zap.SugaredLogger {
 	if globalLogger == nil {
-		// Initialize a default logger if not initialized
 		Init() //nolint:errcheck // fallback initialization
 	}
 	if ctx == nil {

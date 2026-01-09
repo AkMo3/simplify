@@ -33,7 +33,6 @@ func init() {
 
 	logsCmd.Flags().BoolVarP(&followLogs, "follow", "f", false, "Follow log output")
 	logsCmd.Flags().StringVarP(&tailLines, "tail", "n", "", "Number of lines to show from the end")
-	logsCmd.Flags().StringVar(&tailLines, "last", "", "Number of lines to show from the end (alias for --tail)")
 }
 
 func getContainerLogs(cmd *cobra.Command, args []string) error {

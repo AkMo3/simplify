@@ -65,8 +65,7 @@ func listContainers(cmd *cobra.Command, args []string) error {
 		)
 	}
 
-	w.Flush()
-	return nil
+	return w.Flush()
 }
 
 func truncateString(s string, maxLen int) string {

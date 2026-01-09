@@ -16,8 +16,7 @@ import (
 	nettypes "go.podman.io/common/libnetwork/types"
 )
 
-/* Type definitions */
-
+// Client wraps the Podman bindings
 type Client struct {
 	ctx context.Context
 }
@@ -32,8 +31,7 @@ type ContainerInfo struct {
 	Ports   string
 }
 
-/* Public Static Functions */
-
+// NewClient creates a new Podman client
 func NewClient(ctx context.Context) (*Client, error) {
 	logger.DebugCtx(ctx, "Connecting to Podman socket")
 
@@ -47,8 +45,6 @@ func NewClient(ctx context.Context) (*Client, error) {
 	return &Client{ctx: ctx}, nil
 }
 
-/* Public Class Functions */
-
 // Context returns the connection context for direct API calls if needed
 func (c *Client) Context() context.Context {
 	return c.ctx
@@ -58,7 +54,7 @@ func (c *Client) Context() context.Context {
 func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string) (string, error) {
 	logger.DebugCtx(ctx, "Checking if image exists", "image", image)
 
-	// Pull image if not needed
+	// Pull image if not exists
 	exists, err := images.Exists(c.ctx, image, nil)
 	if err != nil {
 		return "", fmt.Errorf("checking image: %w", err)
@@ -176,7 +172,7 @@ func (c *Client) List(ctx context.Context, all bool) ([]ContainerInfo, error) {
 	return result, nil
 }
 
-// Logs streams container Logs
+// Logs streams container logs
 func (c *Client) Logs(ctx context.Context, name string, follow bool, tail string) error {
 	logger.DebugCtx(ctx, "Getting container logs",
 		"name", name,
@@ -235,9 +231,7 @@ func (c *Client) Logs(ctx context.Context, name string, follow bool, tail string
 	return nil
 }
 
-/* Utility Functions */
-
-// Get socket path based on OS
+// getSocketPath returns the Podman socket path based on environment
 func getSocketPath() string {
 	if sock := os.Getenv("PODMAN_SOCK"); sock != "" {
 		return "unix://" + sock
@@ -270,7 +264,7 @@ func envSliceToMap(env []string) map[string]string {
 	return result
 }
 
-// Helper function to format ports for display
+// formatPorts formats port mappings for display
 func formatPorts(ports []nettypes.PortMapping) string {
 	if len(ports) == 0 {
 		return ""
@@ -289,7 +283,7 @@ func formatPorts(ports []nettypes.PortMapping) string {
 	return strings.Join(portStrs, ", ")
 }
 
-// Helper to create bool pointer
+// ptrBool creates a bool pointer
 func ptrBool(b bool) *bool {
 	return &b
 }

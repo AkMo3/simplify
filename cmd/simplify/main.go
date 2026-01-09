@@ -12,28 +12,25 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
 func run() error {
-	// Load configuration
+	// Load configuration first
 	if err := config.Load(cli.GetConfigPath()); err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Initialize logger
+	// Initialize logger based on environment
 	if err := logger.Init(); err != nil {
 		return fmt.Errorf("failed to initialize logger: %w", err)
 	}
 	defer logger.Sync()
 
-	logger.Info("Starting simplify", "env", config.Get().Env)
-
 	// Execute CLI
 	if err := cli.Execute(); err != nil {
-		logger.Error("Command failed", "error", err)
 		return err
 	}
 

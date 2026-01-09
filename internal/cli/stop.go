@@ -24,7 +24,6 @@ var stopTimeout uint
 func init() {
 	rootCmd.AddCommand(stopCmd)
 
-	// Default 10 seconds for Linux containers
 	stopCmd.Flags().UintVarP(&stopTimeout, "timeout", "t", 10, "Seconds to wait before force killing")
 }
 

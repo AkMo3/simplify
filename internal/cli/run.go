@@ -12,7 +12,7 @@ import (
 var runCmd = &cobra.Command{
 	Use:   "run",
 	Short: "Run a container",
-	Long:  `Run a container with the specified image and configuration`,
+	Long:  `Run a container with the specified image and configuration.`,
 	Example: `  simplify run --name web --image nginx:latest --port 8080:80
   simplify run --name api --image myapp:v1 --port 3000:3000 --env DB_HOST=localhost`,
 	RunE: runContainer,
@@ -30,7 +30,7 @@ func init() {
 
 	runCmd.Flags().StringVarP(&containerName, "name", "n", "", "Container name (required)")
 	runCmd.Flags().StringVarP(&imageName, "image", "i", "", "Container image (required)")
-	runCmd.Flags().StringSliceVarP(&portMappings, "port", "p", []string{}, "Port Mappings (host:container)")
+	runCmd.Flags().StringSliceVarP(&portMappings, "port", "p", []string{}, "Port mappings (host:container)")
 	runCmd.Flags().StringSliceVarP(&envVars, "env", "e", []string{}, "Environment variables (KEY=VALUE)")
 
 	_ = runCmd.MarkFlagRequired("name")  //nolint:errcheck // flag registration rarely fails
@@ -38,15 +38,17 @@ func init() {
 }
 
 func runContainer(cmd *cobra.Command, args []string) error {
-	// Create context with operation ID
 	ctx := logger.WithOperationID(context.Background())
 
-	logger.InfoCtx(ctx, "Running container", "name", containerName, "image", "imageName")
+	logger.InfoCtx(ctx, "Running container",
+		"name", containerName,
+		"image", imageName,
+	)
 
 	client, err := container.NewClient(ctx)
 	if err != nil {
 		logger.ErrorCtx(ctx, "Failed to connect to Podman", "error", err)
-		return fmt.Errorf("faild to connect to Podman: %w", err)
+		return fmt.Errorf("failed to connect to Podman: %w", err)
 	}
 
 	ports, err := parsePorts(portMappings)
@@ -66,26 +68,21 @@ func runContainer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to run container: %w", err)
 	}
 
-	logger.InfoCtx(ctx, "Container started",
-		"name", containerName,
-		"id", id[:12],
-	)
-
+	fmt.Printf("Container %s started (ID: %s)\n", containerName, id[:12])
 	return nil
 }
 
-/* Private Functions */
+// parsePorts converts "host:container" strings to a map
 func parsePorts(mappings []string) (map[uint16]uint16, error) {
 	ports := make(map[uint16]uint16)
 
 	for _, m := range mappings {
-		var host, containerID uint16
-		_, err := fmt.Sscanf(m, "%d:%d", &host, &containerID)
+		var host, containerPort uint16
+		_, err := fmt.Sscanf(m, "%d:%d", &host, &containerPort)
 		if err != nil {
-			return nil, fmt.Errorf("invalid port mapping %q (use host:container)", m)
+			return nil, fmt.Errorf("invalid port mapping %q (use host:container format): %w", m, err)
 		}
-
-		ports[host] = containerID
+		ports[host] = containerPort
 	}
 
 	return ports, nil

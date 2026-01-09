@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/containers/podman/v5 v5.7.1
+	github.com/go-chi/chi/v5 v5.2.3
 	github.com/google/uuid v1.6.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
@@ -11,7 +12,6 @@ require (
 	go.etcd.io/bbolt v1.4.3
 	go.podman.io/common v0.66.1
 	go.uber.org/zap v1.27.1
-	github.com/go-chi/chi/v5 v5.2.3
 )
 
 require (
