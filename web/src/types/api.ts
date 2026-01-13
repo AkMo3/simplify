@@ -3,7 +3,10 @@ export interface Application {
   environment_id: string
   name: string
   image: string
+  status: ContainerStatus
   replicas: number
+  health_check?: HealthCheckConfig
+  health_status: HealthCheckStatus
   ports: Record<string, string>
   env_vars: Record<string, string>
   created_at: string
@@ -41,6 +44,7 @@ export interface CreateApplicationRequest {
   replicas?: number
   ports?: Record<string, string>
   env_vars?: Record<string, string>
+  health_check?: HealthCheckConfig
 }
 
 export interface UpdateApplicationRequest {
@@ -50,6 +54,7 @@ export interface UpdateApplicationRequest {
   replicas?: number
   ports?: Record<string, string>
   env_vars?: Record<string, string>
+  health_check?: HealthCheckConfig
 }
 
 // Health check types
@@ -77,3 +82,22 @@ export interface ApiError {
     field?: string
   }
 }
+
+export type ContainerStatus =
+  | 'creating'
+  | 'running'
+  | 'restarting'
+  | 'stopping'
+  | 'stopped'
+  | 'error'
+
+export type HealthCheckStatus = 'healthy' | 'unhealthy' | 'starting' | 'none'
+
+export interface HealthCheckConfig {
+  path: string
+  interval: number
+  timeout: number
+  retries: number
+}
+
+

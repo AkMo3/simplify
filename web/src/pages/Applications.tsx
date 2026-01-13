@@ -1,21 +1,53 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Plus, Trash2, RefreshCw, Box, Eye } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Plus, Trash2, RefreshCw, Box, ExternalLink } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Button, Badge } from '@/components/ui'
+import { Button } from '@/components/ui'
+import { ContainerStatusBadge, HealthStatusBadge } from '@/components/ui/StatusBadge'
 import { CreateApplicationForm } from '@/components/applications/CreateApplicationForm'
+import { ApplicationDrawer } from '@/components/applications/ApplicationDrawer'
 import { useApplications, useDeleteApplication } from '@/hooks/useApplications'
-import { cn } from '@/lib/utils'
+import { useSearch } from '@/contexts/SearchContext'
 import type { Application } from '@/types/api'
+
+const MAX_VISIBLE_APPS = 6
 
 export function Applications() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [selectedApp, setSelectedApp] = useState<Application | null>(null)
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
 
   const { data: applications, isLoading, isError, refetch } = useApplications()
   const deleteMutation = useDeleteApplication()
+  const { query } = useSearch()
 
-  const handleDelete = async (app: Application) => {
+  // Filter, sort, and limit applications
+  const displayedApplications = useMemo(() => {
+    if (!applications) return []
+
+    let filtered = applications
+
+    // Client-side search filtering by name
+    if (query.trim()) {
+      const searchLower = query.toLowerCase()
+      filtered = filtered.filter((app) =>
+        app.name.toLowerCase().includes(searchLower)
+      )
+    }
+
+    // Sort by updated_at descending (most recent first)
+    const sorted = [...filtered].sort((a, b) => {
+      const dateA = new Date(a.updated_at || a.created_at).getTime()
+      const dateB = new Date(b.updated_at || b.created_at).getTime()
+      return dateB - dateA
+    })
+
+    // Limit to MAX_VISIBLE_APPS
+    return sorted.slice(0, MAX_VISIBLE_APPS)
+  }, [applications, query])
+
+  const handleDelete = async (e: React.MouseEvent, app: Application) => {
+    e.stopPropagation() // Prevent row click
     if (!confirm(`Are you sure you want to delete "${app.name}"?`)) return
 
     setDeletingId(app.id)
@@ -24,6 +56,17 @@ export function Applications() {
     } finally {
       setDeletingId(null)
     }
+  }
+
+  const handleRowClick = (app: Application) => {
+    setSelectedApp(app)
+    setIsDrawerOpen(true)
+  }
+
+  const handleDrawerClose = () => {
+    setIsDrawerOpen(false)
+    // Delay clearing selected app to allow exit animation
+    setTimeout(() => setSelectedApp(null), 200)
   }
 
   const formatDate = (dateString: string) => {
@@ -37,10 +80,49 @@ export function Applications() {
     })
   }
 
+  // Generate port URL (localhost for now, will be domain later with Traefik)
+  const getPortUrl = (hostPort: string) => {
+    return `http://localhost:${hostPort}`
+  }
+
+  // Get display ports (show first 2, then +N more)
+  const getPortsDisplay = (ports: Record<string, string> | undefined) => {
+    if (!ports || Object.keys(ports).length === 0) {
+      return null
+    }
+
+    const portEntries = Object.entries(ports)
+    const visiblePorts = portEntries.slice(0, 2)
+    const remainingCount = portEntries.length - 2
+
+    return (
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {visiblePorts.map(([hostPort]) => (
+          <a
+            key={hostPort}
+            href={getPortUrl(hostPort)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[hsl(0_0%_15%)] text-xs font-mono text-[hsl(0_0%_70%)] hover:bg-[hsl(0_0%_20%)] hover:text-foreground transition-colors"
+          >
+            :{hostPort}
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        ))}
+        {remainingCount > 0 && (
+          <span className="text-xs text-muted-foreground">
+            +{remainingCount} more
+          </span>
+        )}
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Applications</h1>
           <p className="text-muted-foreground mt-1">
@@ -54,7 +136,7 @@ export function Applications() {
             onClick={() => refetch()}
             disabled={isLoading}
           >
-            <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
           <Button onClick={() => setIsCreateModalOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -62,6 +144,14 @@ export function Applications() {
           </Button>
         </div>
       </div>
+
+      {/* Search indicator */}
+      {query && (
+        <div className="text-sm text-muted-foreground">
+          Showing results for "<span className="text-foreground">{query}</span>"
+          {displayedApplications.length === 0 && ' — No applications found'}
+        </div>
+      )}
 
       {/* Content */}
       {isLoading ? (
@@ -88,93 +178,107 @@ export function Applications() {
             Create Application
           </Button>
         </div>
+      ) : displayedApplications.length === 0 ? (
+        <div className="card p-12 text-center">
+          <Box className="h-12 w-12 mx-auto text-muted-foreground/50" />
+          <h3 className="mt-4 text-lg font-medium">No matching applications</h3>
+          <p className="mt-1 text-muted-foreground">
+            Try adjusting your search query
+          </p>
+        </div>
       ) : (
         <div className="card overflow-hidden">
           <table className="w-full">
             <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
-                  Name
-                </th>
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
-                  Image
-                </th>
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
-                  Replicas
-                </th>
-                <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
-                  Created
-                </th>
-                <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-4 py-3">
-                  Actions
-                </th>
+              <tr className="border-b border-border/50 bg-[hsl(0_0%_9%)]">
+                <th className="table-header">Name</th>
+                <th className="table-header">Status</th>
+                <th className="table-header">Ports</th>
+                <th className="table-header">Health</th>
+                <th className="table-header">Created</th>
+                <th className="table-header text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               <AnimatePresence>
-                {applications?.map((app) => (
+                {displayedApplications.map((app) => (
                   <motion.tr
                     key={app.id}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="border-b last:border-0 hover:bg-muted/30 transition-colors"
+                    onClick={() => handleRowClick(app)}
+                    className="table-row cursor-pointer"
                   >
-                    <td className="px-4 py-3">
-                      <Link to={`/applications/${app.id}`} className="flex items-center gap-3 group">
-                        <div className="h-8 w-8 rounded-md bg-primary/10 flex items-center justify-center">
-                          <Box className="h-4 w-4 text-primary" />
+                    {/* Name */}
+                    <td className="table-cell">
+                      <div className="flex items-center gap-3 group">
+                        <div className="h-9 w-9 rounded-lg bg-[hsl(0_0%_15%)] flex items-center justify-center">
+                          <Box className="h-4 w-4 text-[hsl(0_0%_60%)]" />
                         </div>
                         <div>
-                          <p className="font-medium group-hover:text-primary transition-colors">{app.name}</p>
+                          <p className="font-medium group-hover:text-foreground transition-colors">
+                            {app.name}
+                          </p>
                           <p className="text-xs text-muted-foreground font-mono">
-                            {app.id.slice(0, 8)}
+                            {app.image}
                           </p>
                         </div>
-                      </Link>
+                      </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <code className="text-sm bg-muted px-2 py-1 rounded">
-                        {app.image}
-                      </code>
+
+                    {/* Status */}
+                    <td className="table-cell">
+                      <ContainerStatusBadge status={app.status || 'stopped'} />
                     </td>
-                    <td className="px-4 py-3">
-                      <Badge variant="outline">{app.replicas || 1}</Badge>
+
+                    {/* Ports */}
+                    <td className="table-cell">
+                      {getPortsDisplay(app.ports) || (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">
+
+                    {/* Health */}
+                    <td className="table-cell">
+                      <HealthStatusBadge status={app.health_status || 'none'} />
+                    </td>
+
+                    {/* Created */}
+                    <td className="table-cell text-sm text-muted-foreground">
                       {formatDate(app.created_at)}
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Link to={`/applications/${app.id}`}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-muted-foreground hover:text-foreground"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </Link>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(app)}
-                          disabled={deletingId === app.id}
-                          className="text-muted-foreground hover:text-destructive"
-                        >
-                          {deletingId === app.id ? (
-                            <RefreshCw className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
+
+                    {/* Actions */}
+                    <td className="table-cell text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => handleDelete(e, app)}
+                        disabled={deletingId === app.id}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        {deletingId === app.id ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </Button>
                     </td>
                   </motion.tr>
                 ))}
               </AnimatePresence>
             </tbody>
           </table>
+
+          {/* Show more indicator */}
+          {applications && applications.length > MAX_VISIBLE_APPS && !query && (
+            <div className="px-4 py-3 border-t border-border/50 text-center">
+              <span className="text-sm text-muted-foreground">
+                Showing {MAX_VISIBLE_APPS} of {applications.length} applications
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -182,6 +286,13 @@ export function Applications() {
       <CreateApplicationForm
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
+      />
+
+      {/* Application Details Drawer */}
+      <ApplicationDrawer
+        application={selectedApp}
+        isOpen={isDrawerOpen}
+        onClose={handleDrawerClose}
       />
     </div>
   )
