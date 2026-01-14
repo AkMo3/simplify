@@ -20,12 +20,12 @@ type Server struct {
 	router    *chi.Mux
 	server    *http.Server
 	store     *store.Store
-	container *container.Client
+	container container.ContainerManager
 	config    *config.Config
 }
 
 // New creates a new Server with the provided dependencies
-func New(cfg *config.Config, storeImpl *store.Store, containerClient *container.Client) *Server {
+func New(cfg *config.Config, storeImpl *store.Store, containerClient container.ContainerManager) *Server {
 	s := &Server{
 		router:    chi.NewRouter(),
 		store:     storeImpl,
@@ -96,6 +96,9 @@ func (s *Server) setupRoutes() {
 		r.Get("/environments/{id}", WrapHandler(s.handleGetEnvironment))
 		r.Put("/environments/{id}", WrapHandler(s.handleUpdateEnvironment))
 		r.Delete("/environments/{id}", WrapHandler(s.handleDeleteEnvironment))
+
+		// Images
+		r.Get("/images/inspect", WrapHandler(s.handleInspectImage))
 	})
 }
 

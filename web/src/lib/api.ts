@@ -5,6 +5,7 @@ import type {
   HealthStatus,
   ReadinessStatus,
   ApiError,
+  ImageInfo,
 } from '@/types/api'
 
 const API_BASE = '/api/v1'
@@ -110,4 +111,8 @@ export async function deleteApplication(id: string): Promise<void> {
   return fetchApi<void>(`/applications/${id}`, {
     method: 'DELETE',
   })
+}
+
+export async function inspectImage(image: string): Promise<ImageInfo> {
+  return fetchApi<ImageInfo>(`/images/inspect?image=${encodeURIComponent(image)}`)
 }

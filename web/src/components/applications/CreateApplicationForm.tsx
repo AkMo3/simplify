@@ -1,7 +1,9 @@
-import { useState, type FormEvent } from 'react'
+import { useState, useEffect, type FormEvent } from 'react'
+import { Loader2 } from 'lucide-react'
 import { Button, Input, Modal } from '@/components/ui'
 import { useCreateApplication } from '@/hooks/useApplications'
-import { ApiClientError } from '@/lib/api'
+import { ApiClientError, inspectImage } from '@/lib/api'
+import { PortMappingInput, type PortMappingItem } from './PortMappingInput'
 
 interface CreateApplicationFormProps {
   isOpen: boolean
@@ -18,6 +20,7 @@ interface FormErrors {
   name?: string
   image?: string
   replicas?: string
+  ports?: string
   general?: string
 }
 
@@ -27,9 +30,35 @@ export function CreateApplicationForm({ isOpen, onClose }: CreateApplicationForm
     image: '',
     replicas: '1',
   })
+  const [ports, setPorts] = useState<PortMappingItem[]>([])
   const [errors, setErrors] = useState<FormErrors>({})
+  const [inspecting, setInspecting] = useState(false)
+  const [exposedPorts, setExposedPorts] = useState<string[]>([])
 
   const createMutation = useCreateApplication()
+
+  // Debounced image inspection
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (!formData.image.trim()) {
+        setExposedPorts([])
+        return
+      }
+
+      setInspecting(true)
+      try {
+        const info = await inspectImage(formData.image.trim())
+        setExposedPorts(info.exposed_ports || [])
+      } catch (error) {
+        // Ignore errors during typing (image might not exist yet)
+        setExposedPorts([])
+      } finally {
+        setInspecting(false)
+      }
+    }, 1000)
+
+    return () => clearTimeout(timer)
+  }, [formData.image])
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {}
@@ -49,6 +78,18 @@ export function CreateApplicationForm({ isOpen, onClose }: CreateApplicationForm
       newErrors.replicas = 'Replicas must be between 1 and 10'
     }
 
+    // Validate ports
+    ports.forEach(item => {
+      if (!item.hostPort && !item.containerPort) return
+
+      if (item.hostPort && (isNaN(parseInt(item.hostPort)) || parseInt(item.hostPort) < 1 || parseInt(item.hostPort) > 65535)) {
+        newErrors.ports = 'Host ports must be valid numbers (1-65535)'
+      }
+      if (item.containerPort && (isNaN(parseInt(item.containerPort)) || parseInt(item.containerPort) < 1 || parseInt(item.containerPort) > 65535)) {
+        newErrors.ports = 'Container ports must be valid numbers (1-65535)'
+      }
+    })
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -58,17 +99,23 @@ export function CreateApplicationForm({ isOpen, onClose }: CreateApplicationForm
 
     if (!validateForm()) return
 
+    // Clean up ports (remove empty)
+    const validPorts: Record<string, string> = {}
+    ports.forEach(item => {
+      if (item.hostPort && item.containerPort) {
+        validPorts[item.hostPort] = item.containerPort
+      }
+    })
+
     try {
       await createMutation.mutateAsync({
         name: formData.name.trim(),
         image: formData.image.trim(),
         replicas: parseInt(formData.replicas, 10),
+        ports: validPorts,
       })
 
-      // Reset form and close modal on success
-      setFormData({ name: '', image: '', replicas: '1' })
-      setErrors({})
-      onClose()
+      handleClose()
     } catch (error) {
       if (error instanceof ApiClientError) {
         if (error.field) {
@@ -84,6 +131,8 @@ export function CreateApplicationForm({ isOpen, onClose }: CreateApplicationForm
 
   const handleClose = () => {
     setFormData({ name: '', image: '', replicas: '1' })
+    setPorts([])
+    setExposedPorts([])
     setErrors({})
     onClose()
   }
@@ -112,15 +161,38 @@ export function CreateApplicationForm({ isOpen, onClose }: CreateApplicationForm
           hint="Lowercase letters, numbers, and hyphens only"
         />
 
-        <Input
-          label="Image"
-          name="image"
-          placeholder="nginx:latest"
-          value={formData.image}
-          onChange={(e) => setFormData((prev) => ({ ...prev, image: e.target.value }))}
-          error={errors.image}
-          hint="Docker image name with optional tag"
-        />
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <Input
+              label="Image"
+              name="image"
+              placeholder="nginx:latest"
+              value={formData.image}
+              onChange={(e) => setFormData((prev) => ({ ...prev, image: e.target.value }))}
+              error={errors.image}
+              className="flex-1"
+            />
+            {inspecting && (
+              <div className="ml-2 mt-8 text-muted-foreground animate-pulse">
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </div>
+            )}
+          </div>
+
+
+        </div>
+
+        <div>
+          <label className="text-sm font-medium mb-1.5 block">Port Mappings</label>
+          <PortMappingInput
+            value={ports}
+            onChange={setPorts}
+            exposedPorts={exposedPorts}
+          />
+          {errors.ports && (
+            <p className="text-xs text-destructive mt-1">{errors.ports}</p>
+          )}
+        </div>
 
         <Input
           label="Replicas"

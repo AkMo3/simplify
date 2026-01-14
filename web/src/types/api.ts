@@ -100,4 +100,7 @@ export interface HealthCheckConfig {
   retries: number
 }
 
-
+export interface ImageInfo {
+  id: string
+  exposed_ports: string[]
+}

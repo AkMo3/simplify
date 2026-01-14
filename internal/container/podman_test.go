@@ -78,19 +78,21 @@ func TestFormatPorts(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    []nettypes.PortMapping
-		expected string
+		expected map[string]string
 	}{
 		{
 			name:     "empty ports",
 			input:    []nettypes.PortMapping{},
-			expected: "",
+			expected: map[string]string{},
 		},
 		{
 			name: "single port with host binding",
 			input: []nettypes.PortMapping{
 				{HostIP: "0.0.0.0", HostPort: 8080, ContainerPort: 80, Protocol: "tcp"},
 			},
-			expected: "0.0.0.0:8080->80/tcp",
+			expected: map[string]string{
+				"80/tcp": "0.0.0.0:8080",
+			},
 		},
 		{
 			name: "multiple ports",
@@ -98,28 +100,37 @@ func TestFormatPorts(t *testing.T) {
 				{HostIP: "0.0.0.0", HostPort: 8080, ContainerPort: 80, Protocol: "tcp"},
 				{HostIP: "0.0.0.0", HostPort: 443, ContainerPort: 443, Protocol: "tcp"},
 			},
-			expected: "0.0.0.0:8080->80/tcp, 0.0.0.0:443->443/tcp",
+			expected: map[string]string{
+				"80/tcp":  "0.0.0.0:8080",
+				"443/tcp": "0.0.0.0:443",
+			},
 		},
 		{
 			name: "container port only (no host binding)",
 			input: []nettypes.PortMapping{
 				{HostIP: "", HostPort: 0, ContainerPort: 80, Protocol: "tcp"},
 			},
-			expected: "80/tcp",
+			expected: map[string]string{
+				"80/tcp": "",
+			},
 		},
 		{
 			name: "localhost binding",
 			input: []nettypes.PortMapping{
 				{HostIP: "127.0.0.1", HostPort: 3000, ContainerPort: 3000, Protocol: "tcp"},
 			},
-			expected: "127.0.0.1:3000->3000/tcp",
+			expected: map[string]string{
+				"3000/tcp": "127.0.0.1:3000",
+			},
 		},
 		{
 			name: "udp protocol",
 			input: []nettypes.PortMapping{
 				{HostIP: "0.0.0.0", HostPort: 53, ContainerPort: 53, Protocol: "udp"},
 			},
-			expected: "0.0.0.0:53->53/udp",
+			expected: map[string]string{
+				"53/udp": "0.0.0.0:53",
+			},
 		},
 	}
 

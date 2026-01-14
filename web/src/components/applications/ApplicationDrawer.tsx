@@ -9,22 +9,29 @@ import {
   ArrowRight,
 } from 'lucide-react'
 import { Drawer } from '@/components/ui/Drawer'
-import { Button } from '@/components/ui/Button'
 import { ContainerStatusBadge, HealthStatusBadge } from '@/components/ui/StatusBadge'
 import type { Application } from '@/types/api'
+import { useState, useEffect } from 'react'
+import { PortMappingInput, type PortMappingItem } from './PortMappingInput'
+import { inspectImage, updateApplication } from '@/lib/api'
+import { Button } from '@/components/ui/Button'
 
 interface ApplicationDrawerProps {
   application: Application | null
   isOpen: boolean
   onClose: () => void
+  initialEditPorts?: boolean
 }
 
 export function ApplicationDrawer({
   application,
   isOpen,
   onClose,
+  initialEditPorts = false,
 }: ApplicationDrawerProps) {
   if (!application) return null
+
+
 
   const formatDate = (dateString: string) => {
     if (!dateString) return '-'
@@ -39,9 +46,93 @@ export function ApplicationDrawer({
     })
   }
 
-  const getPortUrl = (hostPort: string) => {
-    return `http://localhost:${hostPort}`
+  const [isEditingPorts, setIsEditingPorts] = useState(false)
+  const [editedPorts, setEditedPorts] = useState<PortMappingItem[]>([])
+  const [exposedPorts, setExposedPorts] = useState<string[]>([])
+  const [isSaving, setIsSaving] = useState(false)
+
+  const handleStartEdit = async () => {
+    setIsEditingPorts(true)
+
+    // Transform ports for editing:
+    // API returns: { "80/tcp": "0.0.0.0:8080" } (Container -> Host)
+    // We want unique ID for each row to maintain focus stability
+    const rawPorts = application.ports || {}
+    const items: PortMappingItem[] = []
+
+    Object.entries(rawPorts).forEach(([containerKey, hostVal]) => {
+      // Clean container port: "80/tcp" -> "80"
+      const containerPort = containerKey.split('/')[0]
+
+      // Clean host port: "0.0.0.0:8080" -> "8080"
+      // If hostVal is empty string, we skip
+      if (!hostVal) return
+
+      const hostPort = hostVal.includes(':') ? hostVal.split(':').pop() || '' : hostVal
+
+      if (hostPort && containerPort) {
+        items.push({
+          id: self.crypto.randomUUID(),
+          hostPort,
+          containerPort
+        })
+      }
+    })
+
+    setEditedPorts(items)
+
+    // Fetch exposed ports
+    try {
+      const info = await inspectImage(application.image)
+      console.log({ info })
+      setExposedPorts(info.exposed_ports || [])
+    } catch (error) {
+      console.error('Failed to inspect image:', error)
+    }
   }
+
+  const handleSavePorts = async () => {
+    setIsSaving(true)
+    try {
+      // Convert array back to Record for API
+      const portsRecord: Record<string, string> = {}
+      editedPorts.forEach(item => {
+        if (item.hostPort && item.containerPort) {
+          portsRecord[item.hostPort] = item.containerPort
+        }
+      })
+
+      await updateApplication(application.id, {
+        name: application.name,
+        image: application.image,
+        ports: portsRecord,
+      })
+      // We should ideally reload the application data here.
+      // For now, we rely on the parent updating or a page refresh, 
+      // but let's assume the mutation/query invalidation happens elsewhere or close resets it.
+      setIsEditingPorts(false)
+      onClose() // Close drawer to refresh (simple way) or we need a callback to refresh
+    } catch (error) {
+      console.error('Failed to update ports:', error)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const getPortUrl = (hostPort: string) => {
+    return `http://${hostPort}`
+  }
+
+  // Reset/Initialize state when drawer opens
+  useEffect(() => {
+    if (isOpen) {
+      if (initialEditPorts) {
+        handleStartEdit()
+      } else {
+        setIsEditingPorts(false)
+      }
+    }
+  }, [isOpen, initialEditPorts])
 
   return (
     <Drawer
@@ -100,42 +191,88 @@ export function ApplicationDrawer({
 
         {/* Port Mappings */}
         <div>
-          <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
-            <ExternalLink className="h-4 w-4 text-muted-foreground" />
-            Port Mappings
-          </h3>
-          {application.ports && Object.keys(application.ports).length > 0 ? (
-            <div className="space-y-2">
-              {Object.entries(application.ports).map(([hostPort, containerPort]) => (
-                <div
-                  key={hostPort}
-                  className="flex items-center justify-between py-2 px-3 rounded-md bg-[hsl(0_0%_12%)]"
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium flex items-center gap-2">
+              <ExternalLink className="h-4 w-4 text-muted-foreground" />
+              Port Mappings
+            </h3>
+            {!isEditingPorts ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={handleStartEdit}
+              >
+                Edit
+              </Button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setIsEditingPorts(false)}
+                  disabled={isSaving}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-sm">
-                      <span className="text-muted-foreground">Host:</span> {hostPort}
-                    </span>
-                    <span className="text-muted-foreground">→</span>
-                    <span className="font-mono text-sm">
-                      <span className="text-muted-foreground">Container:</span> {containerPort}
-                    </span>
-                  </div>
-                  <a
-                    href={getPortUrl(hostPort)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded bg-[hsl(0_0%_18%)] text-xs hover:bg-[hsl(0_0%_22%)] transition-colors"
-                  >
-                    Open
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                </div>
-              ))}
+                  Cancel
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={handleSavePorts}
+                  isLoading={isSaving}
+                >
+                  Save
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {isEditingPorts ? (
+            <div className="bg-[hsl(0_0%_12%)] p-4 rounded-lg border border-border/50">
+              <PortMappingInput
+                value={editedPorts}
+                onChange={setEditedPorts}
+                exposedPorts={exposedPorts}
+              />
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground py-3 px-3 rounded-md bg-[hsl(0_0%_10%)]">
-              No port mappings configured
-            </p>
+            <>
+              {application.ports && Object.keys(application.ports).length > 0 ? (
+                <div className="space-y-2">
+                  {Object.entries(application.ports).map(([containerPort, hostPort]) => (
+                    <div
+                      key={hostPort}
+                      className="flex items-center justify-between py-2 px-3 rounded-md bg-[hsl(0_0%_12%)]"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono text-sm">
+                          <span className="text-muted-foreground">Container:</span> {containerPort}
+                        </span>
+                        <span className="text-muted-foreground">→</span>
+                        <span className="font-mono text-sm">
+                          <span className="text-muted-foreground">Host:</span> {hostPort}
+                        </span>
+                      </div>
+                      <a
+                        href={getPortUrl(hostPort)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded bg-[hsl(0_0%_18%)] text-xs hover:bg-[hsl(0_0%_22%)] transition-colors"
+                      >
+                        Open
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground py-3 px-3 rounded-md bg-[hsl(0_0%_10%)]">
+                  No port mappings configured
+                </p>
+              )}
+            </>
           )}
         </div>
 

@@ -5,10 +5,10 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/AkMo3/simplify/internal/logger"
+	"github.com/containers/podman/v5/libpod/define"
 	"github.com/containers/podman/v5/pkg/bindings"
 	"github.com/containers/podman/v5/pkg/bindings/containers"
 	"github.com/containers/podman/v5/pkg/bindings/images"
@@ -28,7 +28,8 @@ type ContainerInfo struct {
 	Name    string
 	Image   string
 	Status  string
-	Ports   string
+	Ports   map[string]string
+	Labels  map[string]string
 }
 
 // NewClient creates a new Podman client
@@ -51,7 +52,7 @@ func (c *Client) Context() context.Context {
 }
 
 // Run creates and starts a container
-func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string) (string, error) {
+func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string, labels map[string]string) (string, error) {
 	logger.DebugCtx(ctx, "Checking if image exists", "image", image)
 
 	// Pull image if not exists
@@ -73,6 +74,7 @@ func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]u
 	s := specgen.NewSpecGenerator(image, false)
 	s.Name = name
 	s.Env = envSliceToMap(env)
+	s.Labels = labels
 
 	if len(ports) > 0 {
 		s.PortMappings = make([]nettypes.PortMapping, 0, len(ports))
@@ -164,6 +166,7 @@ func (c *Client) List(ctx context.Context, all bool) ([]ContainerInfo, error) {
 			Image:   ctr.Image,
 			Status:  ctr.State,
 			Ports:   ports,
+			Labels:  ctr.Labels,
 			Created: ctr.Created,
 		})
 	}
@@ -231,6 +234,82 @@ func (c *Client) Logs(ctx context.Context, name string, follow bool, tail string
 	return nil
 }
 
+// GetContainer returns information about a specific container
+func (c *Client) GetContainer(ctx context.Context, nameOrID string) (*ContainerInfo, error) {
+	logger.DebugCtx(ctx, "Getting container info", "id", nameOrID)
+
+	data, err := containers.Inspect(c.ctx, nameOrID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("inspecting container: %w", err)
+	}
+
+	// formatInspectPorts formats port mappings from inspect data
+	ports := formatInspectPorts(data.NetworkSettings.Ports)
+
+	return &ContainerInfo{
+		ID:      data.ID[:12],
+		Name:    data.Name,
+		Image:   data.ImageName,
+		Status:  data.State.Status,
+		Ports:   ports,
+		Labels:  data.Config.Labels,
+		Created: data.Created,
+	}, nil
+}
+
+// InspectImage returns information about an image
+func (c *Client) InspectImage(ctx context.Context, name string) (*ImageInfo, error) {
+	logger.DebugCtx(ctx, "Inspecting image", "image", name)
+
+	// Pull if not exists (optional, but good for inspection)
+	exists, err := images.Exists(c.ctx, name, nil)
+	if err != nil {
+		return nil, fmt.Errorf("checking image: %w", err)
+	}
+	if !exists {
+		logger.InfoCtx(ctx, "Pulling image for inspection", "image", name)
+		_, err = images.Pull(c.ctx, name, nil)
+		if err != nil {
+			return nil, fmt.Errorf("pulling image: %w", err)
+		}
+	}
+
+	data, err := images.GetImage(c.ctx, name, nil)
+	if err != nil {
+		return nil, fmt.Errorf("getting image info: %w", err)
+	}
+
+	exposedPorts := make([]string, 0)
+	if data.Config != nil && len(data.Config.ExposedPorts) > 0 {
+		for port := range data.Config.ExposedPorts {
+			exposedPorts = append(exposedPorts, port)
+		}
+	}
+
+	return &ImageInfo{
+		ID:           data.ID[:12],
+		ExposedPorts: exposedPorts,
+	}, nil
+}
+
+func formatInspectPorts(ports map[string][]define.InspectHostPort) map[string]string {
+	result := make(map[string]string)
+	if len(ports) == 0 {
+		return result
+	}
+
+	for containerPort, hostPorts := range ports {
+		if len(hostPorts) > 0 {
+			// Just take the first one for now
+			p := hostPorts[0]
+			result[containerPort] = fmt.Sprintf("%s:%s", p.HostIP, p.HostPort)
+		} else {
+			result[containerPort] = ""
+		}
+	}
+	return result
+}
+
 // getSocketPath returns the Podman socket path based on environment
 func getSocketPath() string {
 	if sock := os.Getenv("PODMAN_SOCK"); sock != "" {
@@ -264,23 +343,26 @@ func envSliceToMap(env []string) map[string]string {
 	return result
 }
 
-// formatPorts formats port mappings for display
-func formatPorts(ports []nettypes.PortMapping) string {
+// formatPorts returns port mappings as a map
+func formatPorts(ports []nettypes.PortMapping) map[string]string {
+	result := make(map[string]string)
 	if len(ports) == 0 {
-		return ""
+		return result
 	}
 
-	var portStrs []string
 	for _, p := range ports {
+		containerPort := fmt.Sprintf("%d/%s", p.ContainerPort, p.Protocol)
+		hostVal := ""
 		if p.HostPort > 0 {
-			portStrs = append(portStrs, fmt.Sprintf("%s:%d->%d/%s",
-				p.HostIP, p.HostPort, p.ContainerPort, p.Protocol))
-		} else {
-			portStrs = append(portStrs, fmt.Sprintf("%d/%s",
-				p.ContainerPort, p.Protocol))
+			if p.HostIP != "" {
+				hostVal = fmt.Sprintf("%s:%d", p.HostIP, p.HostPort)
+			} else {
+				hostVal = fmt.Sprintf("%d", p.HostPort)
+			}
 		}
+		result[containerPort] = hostVal
 	}
-	return strings.Join(portStrs, ", ")
+	return result
 }
 
 // ptrBool creates a bool pointer

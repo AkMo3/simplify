@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Plus, Trash2, RefreshCw, Box, ExternalLink } from 'lucide-react'
+import { Plus, Trash2, RefreshCw, Box, ExternalLink, Eye, Pencil } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui'
 import { ContainerStatusBadge, HealthStatusBadge } from '@/components/ui/StatusBadge'
@@ -8,6 +8,7 @@ import { ApplicationDrawer } from '@/components/applications/ApplicationDrawer'
 import { useApplications, useDeleteApplication } from '@/hooks/useApplications'
 import { useSearch } from '@/contexts/SearchContext'
 import type { Application } from '@/types/api'
+import { Link } from 'react-router-dom'
 
 const MAX_VISIBLE_APPS = 6
 
@@ -16,6 +17,7 @@ export function Applications() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [selectedApp, setSelectedApp] = useState<Application | null>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [openInEditMode, setOpenInEditMode] = useState(false)
 
   const { data: applications, isLoading, isError, refetch } = useApplications()
   const deleteMutation = useDeleteApplication()
@@ -60,13 +62,17 @@ export function Applications() {
 
   const handleRowClick = (app: Application) => {
     setSelectedApp(app)
+    setOpenInEditMode(false)
     setIsDrawerOpen(true)
   }
 
   const handleDrawerClose = () => {
     setIsDrawerOpen(false)
     // Delay clearing selected app to allow exit animation
-    setTimeout(() => setSelectedApp(null), 200)
+    setTimeout(() => {
+      setSelectedApp(null)
+      setOpenInEditMode(false)
+    }, 200)
   }
 
   const formatDate = (dateString: string) => {
@@ -97,19 +103,25 @@ export function Applications() {
 
     return (
       <div className="flex items-center gap-1.5 flex-wrap">
-        {visiblePorts.map(([hostPort]) => (
-          <a
-            key={hostPort}
-            href={getPortUrl(hostPort)}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[hsl(0_0%_15%)] text-xs font-mono text-[hsl(0_0%_70%)] hover:bg-[hsl(0_0%_20%)] hover:text-foreground transition-colors"
-          >
-            :{hostPort}
-            <ExternalLink className="h-3 w-3" />
-          </a>
-        ))}
+        {visiblePorts.map(([_, hostVal]) => {
+          // Parse host port (e.g. "0.0.0.0:8080" -> "8080")
+          const hostPort = hostVal.includes(':') ? hostVal.split(':').pop() : hostVal
+          if (!hostPort) return null
+
+          return (
+            <a
+              key={hostVal}
+              href={getPortUrl(hostPort)}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[hsl(0_0%_15%)] text-xs font-mono text-[hsl(0_0%_70%)] hover:bg-[hsl(0_0%_20%)] hover:text-foreground transition-colors"
+            >
+              :{hostPort}
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )
+        })}
         {remainingCount > 0 && (
           <span className="text-xs text-muted-foreground">
             +{remainingCount} more
@@ -250,20 +262,34 @@ export function Applications() {
                     </td>
 
                     {/* Actions */}
+                    {/* Actions */}
                     <td className="table-cell text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => handleDelete(e, app)}
-                        disabled={deletingId === app.id}
-                        className="text-muted-foreground hover:text-destructive"
-                      >
-                        {deletingId === app.id ? (
-                          <RefreshCw className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Link to={`/applications/${app.id}`}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground hover:text-foreground h-8 w-8 px-0"
+                            title="View Details"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => handleDelete(e, app)}
+                          disabled={deletingId === app.id}
+                          className="text-muted-foreground hover:text-destructive h-8 w-8 px-0"
+                          title="Delete Application"
+                        >
+                          {deletingId === app.id ? (
+                            <RefreshCw className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
                     </td>
                   </motion.tr>
                 ))}
@@ -293,6 +319,7 @@ export function Applications() {
         application={selectedApp}
         isOpen={isDrawerOpen}
         onClose={handleDrawerClose}
+        initialEditPorts={openInEditMode}
       />
     </div>
   )

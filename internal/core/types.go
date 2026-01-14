@@ -40,4 +40,6 @@ type Application struct {
 	Name          string            `json:"name"`
 	Image         string            `json:"image"`
 	Replicas      int               `json:"replicas"`
+	Status        string            `json:"status"`
+	HealthStatus  string            `json:"health_status"`
 }

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/AkMo3/simplify/internal/config"
+	"github.com/AkMo3/simplify/internal/container"
 	"github.com/AkMo3/simplify/internal/core"
 	"github.com/AkMo3/simplify/internal/errors"
 	"github.com/AkMo3/simplify/internal/store"
@@ -18,8 +19,42 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// MockContainerManager for testing
+type MockContainerManager struct {
+	ListFunc         func(ctx context.Context, all bool) ([]container.ContainerInfo, error)
+	InspectImageFunc func(ctx context.Context, image string) (*container.ImageInfo, error)
+}
+
+func (m *MockContainerManager) Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string, labels map[string]string) (string, error) {
+	return "mock-id", nil
+}
+func (m *MockContainerManager) Stop(ctx context.Context, name string, timeout *uint) error {
+	return nil
+}
+func (m *MockContainerManager) Remove(ctx context.Context, name string, force bool) error {
+	return nil
+}
+func (m *MockContainerManager) List(ctx context.Context, all bool) ([]container.ContainerInfo, error) {
+	if m.ListFunc != nil {
+		return m.ListFunc(ctx, all)
+	}
+	return []container.ContainerInfo{}, nil
+}
+func (m *MockContainerManager) Logs(ctx context.Context, name string, follow bool, tail string) error {
+	return nil
+}
+func (m *MockContainerManager) GetContainer(ctx context.Context, nameOrID string) (*container.ContainerInfo, error) {
+	return &container.ContainerInfo{}, nil
+}
+func (m *MockContainerManager) InspectImage(ctx context.Context, image string) (*container.ImageInfo, error) {
+	if m.InspectImageFunc != nil {
+		return m.InspectImageFunc(ctx, image)
+	}
+	return &container.ImageInfo{ID: "mock-image-id", ExposedPorts: []string{"80/tcp"}}, nil
+}
+
 // setupTestServer creates a test server with a temporary database
-func setupTestServer(t *testing.T) (srv *Server, cleanup func()) {
+func setupTestServer(t *testing.T) (srv *Server, mock *MockContainerManager, cleanup func()) {
 	t.Helper()
 
 	// Create temp directory for test database
@@ -47,15 +82,16 @@ func setupTestServer(t *testing.T) (srv *Server, cleanup func()) {
 		},
 	}
 
-	// Create server without container client (nil is ok for most tests)
-	srv = New(cfg, s, nil)
+	// Create server with mock container client
+	mockClient := &MockContainerManager{}
+	srv = New(cfg, s, mockClient)
 
 	cleanup = func() {
 		s.Close()
 		os.RemoveAll(tmpDir)
 	}
 
-	return srv, cleanup
+	return srv, mockClient, cleanup
 }
 
 // =============================================================================
@@ -63,7 +99,7 @@ func setupTestServer(t *testing.T) (srv *Server, cleanup func()) {
 // =============================================================================
 
 func TestCreateApplication(t *testing.T) {
-	srv, cleanup := setupTestServer(t)
+	srv, _, cleanup := setupTestServer(t)
 	defer cleanup()
 
 	tests := []struct {
@@ -138,7 +174,7 @@ func TestCreateApplication(t *testing.T) {
 }
 
 func TestGetApplication(t *testing.T) {
-	srv, cleanup := setupTestServer(t)
+	srv, _, cleanup := setupTestServer(t)
 	defer cleanup()
 
 	// Create an application first
@@ -179,8 +215,24 @@ func TestGetApplication(t *testing.T) {
 }
 
 func TestListApplications(t *testing.T) {
-	srv, cleanup := setupTestServer(t)
+	srv, mock, cleanup := setupTestServer(t)
 	defer cleanup()
+
+	// Mock behavior: return list of containers matching created apps
+	mock.ListFunc = func(ctx context.Context, all bool) ([]container.ContainerInfo, error) {
+		return []container.ContainerInfo{
+			{
+				ID:     "c1",
+				Labels: map[string]string{"simplify.app.id": "app-a"},
+				Status: "running",
+			},
+			{
+				ID:     "c2",
+				Labels: map[string]string{"simplify.app.id": "app-b"},
+				Status: "stopped",
+			},
+		}, nil
+	}
 
 	// Initially empty
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/applications", http.NoBody)
@@ -215,10 +267,22 @@ func TestListApplications(t *testing.T) {
 	err = json.Unmarshal(w.Body.Bytes(), &apps)
 	require.NoError(t, err)
 	assert.Len(t, apps, 3)
+
+	// Verify status from mock
+	for _, app := range apps {
+		switch app.ID {
+		case "app-a":
+			assert.Equal(t, "running", app.Status)
+		case "app-b":
+			assert.Equal(t, "stopped", app.Status)
+		case "app-c":
+			assert.Equal(t, "stopped", app.Status) // Fallback for unknown
+		}
+	}
 }
 
 func TestUpdateApplication(t *testing.T) {
-	srv, cleanup := setupTestServer(t)
+	srv, _, cleanup := setupTestServer(t)
 	defer cleanup()
 
 	// Create an application first
@@ -253,7 +317,7 @@ func TestUpdateApplication(t *testing.T) {
 }
 
 func TestUpdateApplicationNotFound(t *testing.T) {
-	srv, cleanup := setupTestServer(t)
+	srv, _, cleanup := setupTestServer(t)
 	defer cleanup()
 
 	updateBody := map[string]any{
@@ -277,7 +341,7 @@ func TestUpdateApplicationNotFound(t *testing.T) {
 }
 
 func TestDeleteApplication(t *testing.T) {
-	srv, cleanup := setupTestServer(t)
+	srv, _, cleanup := setupTestServer(t)
 	defer cleanup()
 
 	// Create an application first
@@ -306,7 +370,7 @@ func TestDeleteApplication(t *testing.T) {
 // =============================================================================
 
 func TestHealthzEndpoint(t *testing.T) {
-	srv, cleanup := setupTestServer(t)
+	srv, _, cleanup := setupTestServer(t)
 	defer cleanup()
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody)
@@ -322,8 +386,13 @@ func TestHealthzEndpoint(t *testing.T) {
 }
 
 func TestReadyzEndpoint(t *testing.T) {
-	srv, cleanup := setupTestServer(t)
+	srv, mock, cleanup := setupTestServer(t)
 	defer cleanup()
+
+	// Simulate failure
+	mock.ListFunc = func(ctx context.Context, all bool) ([]container.ContainerInfo, error) {
+		return nil, errors.NewInternalError("failed to list containers")
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody)
 	w := httptest.NewRecorder()
@@ -347,7 +416,7 @@ func TestReadyzEndpoint(t *testing.T) {
 // =============================================================================
 
 func TestRequireJSONContentType(t *testing.T) {
-	srv, cleanup := setupTestServer(t)
+	srv, _, cleanup := setupTestServer(t)
 	defer cleanup()
 
 	tests := []struct {
@@ -393,7 +462,7 @@ func TestRequireJSONContentType(t *testing.T) {
 }
 
 func TestSecurityHeaders(t *testing.T) {
-	srv, cleanup := setupTestServer(t)
+	srv, _, cleanup := setupTestServer(t)
 	defer cleanup()
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody)
@@ -406,7 +475,7 @@ func TestSecurityHeaders(t *testing.T) {
 }
 
 func TestNoCacheHeaders(t *testing.T) {
-	srv, cleanup := setupTestServer(t)
+	srv, _, cleanup := setupTestServer(t)
 	defer cleanup()
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody)
@@ -475,7 +544,7 @@ func TestMapErrorToResponse(t *testing.T) {
 // =============================================================================
 
 func TestTeamCRUD(t *testing.T) {
-	srv, cleanup := setupTestServer(t)
+	srv, _, cleanup := setupTestServer(t)
 	defer cleanup()
 
 	// Create
@@ -527,7 +596,7 @@ func TestTeamCRUD(t *testing.T) {
 // =============================================================================
 
 func TestServerGracefulShutdown(t *testing.T) {
-	srv, cleanup := setupTestServer(t)
+	srv, _, cleanup := setupTestServer(t)
 	defer cleanup()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -547,4 +616,75 @@ func TestServerGracefulShutdown(t *testing.T) {
 	// Server should shut down gracefully
 	err := <-errCh
 	assert.NoError(t, err)
+}
+
+// =============================================================================
+// Image Handler Tests
+// =============================================================================
+
+func TestInspectImage(t *testing.T) {
+	srv, mock, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	tests := []struct {
+		name           string
+		image          string
+		expectedStatus int
+		mockSetup      func()
+	}{
+		{
+			name:           "valid image",
+			image:          "nginx:latest",
+			expectedStatus: http.StatusOK,
+			mockSetup: func() {
+				mock.InspectImageFunc = func(ctx context.Context, image string) (*container.ImageInfo, error) {
+					return &container.ImageInfo{
+						ID:           "sha256:12345",
+						ExposedPorts: []string{"80/tcp"},
+					}, nil
+				}
+			},
+		},
+		{
+			name:           "missing image param",
+			image:          "",
+			expectedStatus: http.StatusBadRequest,
+			mockSetup:      func() {},
+		},
+		{
+			name:           "image check failure",
+			image:          "invalid:image",
+			expectedStatus: http.StatusInternalServerError,
+			mockSetup: func() {
+				mock.InspectImageFunc = func(ctx context.Context, image string) (*container.ImageInfo, error) {
+					return nil, errors.NewInternalError("failed to inspect")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockSetup()
+
+			url := "/api/v1/images/inspect"
+			if tt.image != "" {
+				url += "?image=" + tt.image
+			}
+
+			req := httptest.NewRequest(http.MethodGet, url, http.NoBody)
+			w := httptest.NewRecorder()
+			srv.Router().ServeHTTP(w, req)
+
+			assert.Equal(t, tt.expectedStatus, w.Code)
+
+			if tt.expectedStatus == http.StatusOK {
+				var info container.ImageInfo
+				err := json.Unmarshal(w.Body.Bytes(), &info)
+				require.NoError(t, err)
+				assert.Equal(t, "sha256:12345", info.ID)
+				assert.Contains(t, info.ExposedPorts, "80/tcp")
+			}
+		})
+	}
 }

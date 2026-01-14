@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/AkMo3/simplify/internal/container"
 	"github.com/AkMo3/simplify/internal/core"
 	"github.com/AkMo3/simplify/internal/errors"
 	"github.com/go-chi/chi/v5"
@@ -52,6 +53,31 @@ func (s *Server) handleListApplications(w http.ResponseWriter, r *http.Request) 
 	apps, err := s.store.ListApplications()
 	if err != nil {
 		return err
+	}
+
+	// Fetch from podman the status of containers
+	containers, err := s.container.List(r.Context(), true)
+	if err != nil {
+		// Log error but return apps with unknown status is better than failing?
+		// For now, let's return error as before but we could improve this.
+		return err
+	}
+
+	// Create a map of AppID -> ContainerInfo
+	containerMap := make(map[string]container.ContainerInfo)
+	for _, c := range containers {
+		if appID, ok := c.Labels["simplify.app.id"]; ok {
+			containerMap[appID] = c
+		}
+	}
+
+	for i, app := range apps {
+		if container, ok := containerMap[app.ID]; ok {
+			apps[i].Status = container.Status
+			apps[i].Ports = container.Ports
+		} else {
+			apps[i].Status = "stopped" // Or "unknown" or empty
+		}
 	}
 
 	// Return empty array instead of null
