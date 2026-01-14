@@ -71,10 +71,10 @@ func (s *Server) handleListApplications(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	for i, app := range apps {
-		if container, ok := containerMap[app.ID]; ok {
-			apps[i].Status = container.Status
-			apps[i].Ports = container.Ports
+	for i := range apps {
+		if info, ok := containerMap[apps[i].ID]; ok {
+			apps[i].Status = info.Status
+			apps[i].Ports = info.Ports
 		} else {
 			apps[i].Status = "stopped" // Or "unknown" or empty
 		}

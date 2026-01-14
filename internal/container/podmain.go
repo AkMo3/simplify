@@ -24,12 +24,12 @@ type Client struct {
 // ContainerInfo holds container information for listing
 type ContainerInfo struct {
 	Created time.Time
+	Ports   map[string]string
+	Labels  map[string]string
 	ID      string
 	Name    string
 	Image   string
 	Status  string
-	Ports   map[string]string
-	Labels  map[string]string
 }
 
 // NewClient creates a new Podman client

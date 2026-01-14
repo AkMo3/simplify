@@ -39,7 +39,7 @@ type Application struct {
 	EnvironmentID string            `json:"environment_id"`
 	Name          string            `json:"name"`
 	Image         string            `json:"image"`
-	Replicas      int               `json:"replicas"`
 	Status        string            `json:"status"`
 	HealthStatus  string            `json:"health_status"`
+	Replicas      int               `json:"replicas"`
 }

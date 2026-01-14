@@ -261,7 +261,7 @@ func sanitizeName(name string) string {
 // checkPortsMatch checks if the application ports match the container ports
 // appPorts: map[HostPort]ContainerPort (e.g. "8080": "80")
 // containerPorts: map[ContainerPort/Proto]HostIP:HostPort (e.g. "80/tcp": "0.0.0.0:8080")
-func checkPortsMatch(appPorts map[string]string, containerPorts map[string]string) bool {
+func checkPortsMatch(appPorts, containerPorts map[string]string) bool {
 	// If counts don't match, they differ
 	// Note: containerPorts might have extra entries for different protocols or bindings?
 	// For simplicity, we check if every appPort exists in containerPorts with correct mapping.
