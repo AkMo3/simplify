@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { useSearch } from '@/contexts/SearchContext'
 import { useRef, useEffect } from 'react'
+import { SyncIndicator } from './SyncIndicator'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -110,6 +111,8 @@ export function Layout() {
           <span className="text-xs text-muted-foreground font-medium hidden md:block px-2 py-1 rounded bg-[hsl(0_0%_15%)] border border-[hsl(0_0%_20%)]">
             v0.1.0
           </span>
+
+          <SyncIndicator />
         </div>
       </header>
 

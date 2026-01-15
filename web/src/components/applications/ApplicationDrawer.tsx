@@ -16,6 +16,7 @@ import { useState, useEffect } from 'react'
 import { PortMappingInput, type PortMappingItem } from './PortMappingInput'
 import { inspectImage, updateApplication } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
 import { useNetworks } from '@/hooks/useNetworks'
 import { usePods } from '@/hooks/usePods'
 import { EditApplicationConnectionModal } from './EditApplicationConnectionModal'
@@ -366,37 +367,70 @@ export function ApplicationDrawer({
             ) : (
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-muted-foreground">Connected to:</span>
-                {application.network_id ? (
-                  <span className="font-medium text-blue-400">
-                    {networks?.find(n => n.id === application.network_id)?.name || 'Unknown Network'}
-                    <span className="text-muted-foreground text-xs ml-1">
-                      ({networks?.find(n => n.id === application.network_id)?.driver || 'custom'})
-                    </span>
-                  </span>
-                ) : (
-                  <span className="font-medium text-muted-foreground">Default Bridge</span>
-                )}
+                {(() => {
+                  // Determine if we are updating (Desired Network != Actual Network)
+                  let isUpdating = false
+                  const desiredNetworkName = application.network_id ? networks?.find(n => n.id === application.network_id)?.name : undefined
+
+                  if (desiredNetworkName) {
+                    if (!application.connected_networks?.includes(desiredNetworkName)) {
+                      isUpdating = true
+                    }
+                  } else if (application.connected_networks && application.connected_networks.length > 0 && !application.connected_networks.some(n => n === 'bridge')) {
+                    // Desired is default bridge (no network_id), but we are on custom network
+                    // (and explicitly not just 'bridge' if that shows up)
+                  }
+
+                  // Also check Pod Assignment mismatch?
+                  // If app.pod_id is set, check if we are in a pod.
+                  // We don't have connected_pod exposed yet.
+                  // Let's stick to Network Updating for now as requested.
+
+                  return (
+                    <>
+                      {isUpdating && <Badge variant="warning" className="h-5 text-[10px] px-1.5 animate-pulse">Updating...</Badge>}
+
+                      {application.network_id ? (
+                        <>
+                          <span className="font-medium text-blue-400">
+                            {networks?.find(n => n.id === application.network_id)?.name || 'Unknown Network'}
+                            <span className="text-muted-foreground text-xs ml-1">
+                              ({networks?.find(n => n.id === application.network_id)?.driver || 'custom'})
+                            </span>
+                          </span>
+                          {application.ip_address && (
+                            <span className="text-xs font-mono text-muted-foreground bg-black/20 px-1.5 py-0.5 rounded">
+                              {application.ip_address}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="font-medium text-muted-foreground">Default Bridge</span>
+                      )}
+                    </>
+                  )
+                })()}
               </div>
             )}
           </div>
+
+          {/* View Full Details Button */}
+          <div className="pt-4 border-t border-border/30">
+            <Link to={`/applications/${application.id}`} onClick={onClose}>
+              <Button className="w-full justify-center">
+                View Full Details
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            </Link>
+          </div>
         </div>
 
-        {/* View Full Details Button */}
-        <div className="pt-4 border-t border-border/30">
-          <Link to={`/applications/${application.id}`} onClick={onClose}>
-            <Button className="w-full justify-center">
-              View Full Details
-              <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
-          </Link>
-        </div>
+        <EditApplicationConnectionModal
+          application={application}
+          isOpen={isEditNetworkModalOpen}
+          onClose={() => setIsEditNetworkModalOpen(false)}
+        />
       </div>
-
-      <EditApplicationConnectionModal
-        application={application}
-        isOpen={isEditNetworkModalOpen}
-        onClose={() => setIsEditNetworkModalOpen(false)}
-      />
     </Drawer>
   )
 }

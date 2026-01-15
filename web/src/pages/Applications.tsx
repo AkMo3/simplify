@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Plus, Trash2, RefreshCw, Box, ExternalLink, Eye, Pencil } from 'lucide-react'
+import { Plus, Trash2, RefreshCw, Box, ExternalLink, Eye } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui'
 import { ContainerStatusBadge, HealthStatusBadge } from '@/components/ui/StatusBadge'

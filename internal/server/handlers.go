@@ -76,6 +76,9 @@ func (s *Server) handleListApplications(w http.ResponseWriter, r *http.Request) 
 		if info, ok := containerMap[apps[i].ID]; ok {
 			apps[i].Status = info.Status
 			apps[i].Ports = info.Ports
+			apps[i].IPAddress = info.IPAddress
+			apps[i].ExposedPorts = info.ExposedPorts
+			apps[i].ConnectedNetworks = info.Networks
 		} else {
 			apps[i].Status = "stopped" // Or "unknown" or empty
 		}
@@ -99,6 +102,22 @@ func (s *Server) handleGetApplication(w http.ResponseWriter, r *http.Request) er
 	app, err := s.store.GetApplication(id)
 	if err != nil {
 		return err
+	}
+
+	// Fetch runtime info
+	info, err := s.container.GetContainer(r.Context(), app.ID)
+	if err != nil {
+		// Log error but return DB state (likely stopped or previous state)
+		logger.ErrorCtx(r.Context(), "Error inspecting container", "id", app.ID, "error", err)
+		if app.Status == "" {
+			app.Status = "stopped"
+		}
+	} else {
+		app.Status = info.Status
+		app.Ports = info.Ports
+		app.IPAddress = info.IPAddress
+		app.ExposedPorts = info.ExposedPorts
+		app.ConnectedNetworks = info.Networks
 	}
 
 	return writeSuccess(w, app)

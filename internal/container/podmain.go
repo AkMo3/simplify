@@ -26,13 +26,17 @@ type Client struct {
 
 // ContainerInfo holds container information for listing
 type ContainerInfo struct {
-	Created time.Time
-	Ports   map[string]string
-	Labels  map[string]string
-	ID      string
-	Name    string
-	Image   string
-	Status  string
+	Created      time.Time
+	Ports        map[string]string
+	Labels       map[string]string
+	ID           string
+	Name         string
+	Image        string
+	Status       string
+	IPAddress    string
+	ExposedPorts []string
+	PodID        string
+	Networks     []string
 }
 
 // NewClient creates a new Podman client
@@ -55,7 +59,7 @@ func (c *Client) Context() context.Context {
 }
 
 // Run creates and starts a container
-func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string, labels map[string]string, podName string) (string, error) {
+func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string, labels map[string]string, podName string, networkName string) (string, error) {
 	logger.DebugCtx(ctx, "Checking if image exists", "image", image)
 
 	// Pull image if not exists
@@ -109,8 +113,27 @@ func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]u
 				Protocol:      "tcp",
 			})
 		}
+	} else if len(ports) > 0 {
+		s.PortMappings = make([]nettypes.PortMapping, 0, len(ports))
+		for hostPort, containerPort := range ports {
+			logger.DebugCtx(ctx, "Adding port mapping",
+				"host_port", hostPort,
+				"container_port", containerPort,
+			)
+			s.PortMappings = append(s.PortMappings, nettypes.PortMapping{
+				HostIP:        "127.0.0.1",
+				HostPort:      hostPort,
+				ContainerPort: containerPort,
+				Protocol:      "tcp",
+			})
+		}
 	} else {
 		logger.DebugCtx(ctx, "No port mappings provided")
+	}
+
+	if networkName != "" {
+		logger.DebugCtx(ctx, "Setting network", "network", networkName)
+		s.CNINetworks = []string{networkName}
 	}
 
 	// Create container
@@ -187,7 +210,21 @@ func (c *Client) List(ctx context.Context, all bool) ([]ContainerInfo, error) {
 			Ports:   ports,
 			Labels:  ctr.Labels,
 			Created: ctr.Created,
+			PodID:   ctr.Pod,
 		})
+
+		// Populate IP for running containers using Inspect (List doesn't provide it detailed enough)
+		// This is N+1 but necessary for IP display until we find a better way or use events
+		if ctr.State == "running" {
+			// We modify the last element
+			idx := len(result) - 1
+			inspectData, err := containers.Inspect(c.ctx, ctr.ID, nil)
+			if err == nil { // Ignore error, just don't show IP
+				result[idx].IPAddress = getIPAddress(inspectData.NetworkSettings.Networks)
+				result[idx].ExposedPorts = getExposedPorts(inspectData.Config.ExposedPorts)
+				result[idx].Networks = getNetworkNames(inspectData.NetworkSettings.Networks)
+			}
+		}
 	}
 
 	logger.DebugCtx(ctx, "Found containers", "count", len(result))
@@ -264,15 +301,22 @@ func (c *Client) GetContainer(ctx context.Context, nameOrID string) (*ContainerI
 
 	// formatInspectPorts formats port mappings from inspect data
 	ports := formatInspectPorts(data.NetworkSettings.Ports)
+	ip := getIPAddress(data.NetworkSettings.Networks)
+	exposed := getExposedPorts(data.Config.ExposedPorts)
+	networks := getNetworkNames(data.NetworkSettings.Networks)
 
 	return &ContainerInfo{
-		ID:      data.ID[:12],
-		Name:    data.Name,
-		Image:   data.ImageName,
-		Status:  data.State.Status,
-		Ports:   ports,
-		Labels:  data.Config.Labels,
-		Created: data.Created,
+		ID:           data.ID[:12],
+		Name:         data.Name,
+		Image:        data.ImageName,
+		Status:       data.State.Status,
+		Ports:        ports,
+		Labels:       data.Config.Labels,
+		Created:      data.Created,
+		IPAddress:    ip,
+		ExposedPorts: exposed,
+		PodID:        data.Pod,
+		Networks:     networks,
 	}, nil
 }
 
@@ -311,6 +355,7 @@ func (c *Client) InspectImage(ctx context.Context, name string) (*ImageInfo, err
 	}, nil
 }
 
+// formatInspectPorts formats port mappings from inspect data
 func formatInspectPorts(ports map[string][]define.InspectHostPort) map[string]string {
 	result := make(map[string]string)
 	if len(ports) == 0 {
@@ -327,6 +372,21 @@ func formatInspectPorts(ports map[string][]define.InspectHostPort) map[string]st
 		}
 	}
 	return result
+}
+
+// getIPAddress extracts the primary IP address from networks
+// We prioritize the bridge network or the user-defined network
+func getIPAddress(networks map[string]*define.InspectAdditionalNetwork) string {
+	if len(networks) == 0 {
+		return ""
+	}
+	// Return the first non-empty IP found
+	for _, net := range networks {
+		if net.IPAddress != "" {
+			return net.IPAddress
+		}
+	}
+	return ""
 }
 
 // getSocketPath returns the Podman socket path based on environment
@@ -553,6 +613,23 @@ func (c *Client) ListNetworks(ctx context.Context) ([]NetworkInfo, error) {
 			Created: n.Created,
 		})
 	}
-
 	return result, nil
+}
+
+// getExposedPorts extracts the exposed ports keys
+func getExposedPorts(ports map[string]struct{}) []string {
+	result := make([]string, 0, len(ports))
+	for k := range ports {
+		result = append(result, k)
+	}
+	return result
+}
+
+// getNetworkNames extracts the network names
+func getNetworkNames(networks map[string]*define.InspectAdditionalNetwork) []string {
+	result := make([]string, 0, len(networks))
+	for k := range networks {
+		result = append(result, k)
+	}
+	return result
 }

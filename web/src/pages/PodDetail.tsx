@@ -108,13 +108,24 @@ export default function PodDetail() {
                                                     </div>
                                                 </div>
                                                 <div className="text-right">
-                                                    {/* Assuming ports are internal if in pod, but showing them helps */}
-                                                    {Object.keys(app.ports || {}).length > 0 && (
+                                                    {/* Show exposed ports (internal) */}
+                                                    {(app.exposed_ports && app.exposed_ports.length > 0) ? (
                                                         <div className="text-xs text-zinc-400 font-mono">
-                                                            {Object.entries(app.ports).map(([container, host]) => (
-                                                                <div key={container}>{container}{host ? ` -> ${host}` : '(internal)'}</div>
+                                                            {app.exposed_ports.map(port => (
+                                                                <div key={port}>
+                                                                    {port} <span className="text-zinc-600">(listening)</span>
+                                                                </div>
                                                             ))}
                                                         </div>
+                                                    ) : (
+                                                        // Fallback to mapped ports if any (though usually empty in pod)
+                                                        app.ports && Object.keys(app.ports).length > 0 && (
+                                                            <div className="text-xs text-zinc-400 font-mono">
+                                                                {Object.entries(app.ports).map(([container, host]) => (
+                                                                    <div key={container}>{container}{host ? ` -> ${host}` : '(mapped)'}</div>
+                                                                ))}
+                                                            </div>
+                                                        )
                                                     )}
                                                 </div>
                                             </div>
@@ -140,16 +151,35 @@ export default function PodDetail() {
                                     Ports (External)
                                 </div>
                                 <div className="space-y-1">
-                                    {Object.entries(pod.ports || {}).map(([containerPort, hostPort]) => (
-                                        <div
-                                            key={containerPort}
-                                            className="inline-flex items-center gap-2 rounded-md bg-zinc-800/50 px-2 py-1 text-xs font-mono text-zinc-300"
-                                        >
-                                            <span>{containerPort}</span>
-                                            <span className="text-zinc-600">→</span>
-                                            <span className="text-emerald-400">{hostPort}</span>
-                                        </div>
-                                    ))}
+                                    {Object.entries(pod.ports || {}).map(([containerPort, hostPort]) => {
+                                        // Find which app "owns" this port (matches container port or exposed port)
+                                        // App ports keys are "80/tcp", pod ports keys are "80/tcp"
+                                        const ownerApp = podApps.find(app => {
+                                            if (app.ports && Object.keys(app.ports).includes(containerPort)) return true
+                                            if (app.exposed_ports && app.exposed_ports.includes(containerPort)) return true
+                                            return false
+                                        })
+
+                                        return (
+                                            <div key={containerPort} className="flex flex-col gap-1 mb-2">
+                                                <div
+                                                    className="inline-flex items-center gap-2 rounded-md bg-zinc-800/50 px-2 py-1 text-xs font-mono text-zinc-300 w-fit"
+                                                >
+                                                    <span>{containerPort}</span>
+                                                    <span className="text-zinc-600">→</span>
+                                                    <span className="text-emerald-400">{hostPort}</span>
+                                                </div>
+                                                {ownerApp && (
+                                                    <div className="text-[10px] text-zinc-500 pl-1 flex items-center gap-1">
+                                                        <span className="text-zinc-600">via</span>
+                                                        <Link to={`/applications/${ownerApp.id}`} className="hover:text-blue-400 hover:underline transition-colors text-blue-400/80">
+                                                            {ownerApp.name}
+                                                        </Link>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
                                     {Object.keys(pod.ports || {}).length === 0 && (
                                         <span className="text-xs text-zinc-600 italic">No external ports exposed</span>
                                     )}

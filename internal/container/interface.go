@@ -8,7 +8,7 @@ import (
 // ContainerManager defines the interface for container operations.
 // This interface is used for mocking in tests.
 type ContainerManager interface {
-	Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string, labels map[string]string, podName string) (string, error)
+	Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string, labels map[string]string, podName string, networkName string) (string, error)
 	Stop(ctx context.Context, name string, timeout *uint) error
 	Remove(ctx context.Context, name string, force bool) error
 	List(ctx context.Context, all bool) ([]ContainerInfo, error)

@@ -13,6 +13,9 @@ export interface Application {
   env_vars: Record<string, string>
   created_at: string
   updated_at: string
+  ip_address?: string
+  exposed_ports?: string[]
+  connected_networks?: string[]
 }
 
 export interface Team {

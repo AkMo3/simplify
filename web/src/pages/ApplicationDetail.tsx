@@ -288,12 +288,19 @@ export function ApplicationDetail() {
               <div className="bg-muted/50 rounded-md p-3 text-sm">
                 <span className="text-muted-foreground block mb-1">Connected to:</span>
                 {app.network_id ? (
-                  <span className="font-medium text-blue-400 flex items-center gap-2">
-                    {networks?.find(n => n.id === app.network_id)?.name || 'Unknown Network'}
-                    <Badge variant="outline" className="text-xs font-normal">
-                      {networks?.find(n => n.id === app.network_id)?.driver || 'custom'}
-                    </Badge>
-                  </span>
+                  <>
+                    <span className="font-medium text-blue-400 flex items-center gap-2">
+                      {networks?.find(n => n.id === app.network_id)?.name || 'Unknown Network'}
+                      <Badge variant="outline" className="text-xs font-normal">
+                        {networks?.find(n => n.id === app.network_id)?.driver || 'custom'}
+                      </Badge>
+                    </span>
+                    {app.ip_address && (
+                      <span className="text-sm font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                        {app.ip_address}
+                      </span>
+                    )}
+                  </>
                 ) : (
                   <span className="font-medium text-muted-foreground">Default Bridge</span>
                 )}
@@ -374,7 +381,27 @@ export function ApplicationDetail() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No port mappings configured</p>
+                app.exposed_ports && app.exposed_ports.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-yellow-500/80 mb-2 flex items-center gap-2">
+                      <span className="h-1.5 w-1.5 rounded-full bg-yellow-500/80" />
+                      Internal Listening Ports (Not Mapped to Host)
+                    </p>
+                    {app.exposed_ports.map((port) => (
+                      <div
+                        key={port}
+                        className="flex items-center gap-3 py-2 px-3 bg-muted/50 rounded-md"
+                      >
+                        <span className="font-mono text-sm">
+                          {port}
+                        </span>
+                        <span className="text-xs text-muted-foreground">(listening)</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No port mappings configured</p>
+                )
               )
             )}
           </motion.div>

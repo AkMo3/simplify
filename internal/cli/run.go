@@ -62,7 +62,7 @@ func runContainer(cmd *cobra.Command, args []string) error {
 		"env_count", len(envVars),
 	)
 
-	id, err := client.Run(ctx, containerName, imageName, ports, envVars, nil, "")
+	id, err := client.Run(ctx, containerName, imageName, ports, envVars, nil, "", "")
 	if err != nil {
 		logger.ErrorCtx(ctx, "Failed to run container", "error", err)
 		return fmt.Errorf("failed to run container: %w", err)

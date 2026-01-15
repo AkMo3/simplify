@@ -152,20 +152,91 @@ func (w *Worker) reconcileApps(ctx context.Context) error {
 		desiredContainerNames[containerName] = true
 
 		// Check if it exists by AppID
-		if info, exists := existingApps[app.ID]; exists {
+		info, exists := existingApps[app.ID]
+		if exists {
 			desiredContainerNames[info.Name] = true
 
 			// Check if we need to recreate
 			needsRecreate := false
 			if info.Status != "running" && !strings.HasPrefix(info.Status, "Up") {
 				needsRecreate = true
-			} else if app.PodID == "" && !checkPortsMatch(app.Ports, info.Ports) {
-				// Only check ports match if NOT in a pod.
-				// If in a pod, app ports are internal or managed by pod, checking container ports might be misleading
-				// as container ports in pod often show as empty or differently.
-				// For now, skip port check if in Pod.
+			} else if app.PodID != "" {
+				// App should be in a Pod.
+				// app.PodID is the DB ID. We need to check if the container is in the CORRECT physical pod.
+				// Podman container info gives us the PHYSICAL Pod ID.
+				// Issues arise if DB Pod ID != Physical Pod ID (e.g. manual recreation).
+				// Strict check: info.PodID should match app.PodID.
+				// Robust check: Resolve app.PodID -> Pod Name -> Current Physical Pod ID.
+
+				pod, err := w.store.GetPod(app.PodID)
+				if err != nil {
+					// DB Pod missing? If strict, we might want to fail or detach.
+					// For now, let's assume if DB pod is missing, we can't enforce pod constraints.
+					logger.Warn("App assigned to non-existent pod in DB", "app", app.Name, "pod_id", app.PodID)
+				} else {
+					// We have the expected Pod Name.
+					// Let's get the CURRENT Physical Pod ID for this name.
+					// We can InspectPod or ListPods. Inspect is cheaper if singular.
+					physicalPod, err := w.container.InspectPod(ctx, sanitizeName(pod.Name))
+					if err != nil {
+						// Physical Pod missing?
+						// reconcilePods should have created it, but maybe it failed or race condition.
+						// If physical pod missing, we definitely need recreation logic to trigger correct deployment path?
+						// Actually, if physical pod is missing, deployApp will fail anyway.
+						// But here we are checking if CURRENT container is valid.
+						// If physical pod missing, current container CANNOT be in it (unless stale info).
+						needsRecreate = true
+						logger.Info("Physical pod missing", "app", app.Name, "pod_name", pod.Name)
+					} else {
+						// We have physical ID. Compare with info.PodID.
+						// Note: IDs might be short (12 chars) or full (64 chars). compare prefix.
+						match := false
+						if info.PodID == physicalPod.ID {
+							match = true
+						} else if len(info.PodID) > len(physicalPod.ID) && strings.HasPrefix(info.PodID, physicalPod.ID) {
+							match = true
+						} else if len(physicalPod.ID) > len(info.PodID) && strings.HasPrefix(physicalPod.ID, info.PodID) {
+							match = true
+						}
+
+						if !match {
+							needsRecreate = true
+							logger.Info("Pod mismatch", "app", app.Name, "expected_pod_name", pod.Name, "expected_pod_id", physicalPod.ID, "actual_pod_id", info.PodID)
+						}
+					}
+				}
+			} else if app.PodID == "" && info.PodID != "" {
+				// App should NOT be in a Pod, but IS
 				needsRecreate = true
-				logger.Info("Ports mismatch", "app", app.Name, "pod", app.PodID, "info_ports", info.Ports)
+				logger.Info("Pod mismatch (should be standalone)", "app", app.Name, "actual_pod", info.PodID)
+			} else if app.NetworkID != "" {
+				// App should be in a Network
+				// We need to look up network name from DB ID to check against info.Networks names
+				// This requires unnecessary DB lookup inside the loop?
+				// Optimization: Pre-fetch networks map?
+				// Or... simpler: Just assume if networks list is empty, it's wrong (unless default bridge is implied but usually we want explicit)
+				// Actually, we can just check if we need to reconcile networks.
+				// For now, let's skip complex name resolution and rely on "if not in correct pod" and "should be in network".
+				// If we implement network check properly later.
+				// BUT checking if existing network (like 'bridge') matches is good.
+				// Note: info.Networks contains names.
+				// We can just trigger recreate if we know the network name.
+				// Let's defer strict network name check to avoid N+1 DB lookup here,
+				// UNLESS we pre-load networks.
+				// Given the user issue, the main problem was Pod vs Network switch.
+				// The above "app.PodID == "" && info.PodID != """ check COVERS the specific user case!
+				// User switched from Pod -> Network. So App.PodID is empty, but Info.PodID is set.
+				// So that case is handled.
+
+				// Port check only if standalone
+				if !checkPortsMatch(app.Ports, info.Ports) {
+					needsRecreate = true
+					logger.Info("Ports mismatch", "app", app.Name, "info_ports", info.Ports)
+				}
+			} else if app.PodID == "" && !checkPortsMatch(app.Ports, info.Ports) {
+				// Standalone default bridge
+				needsRecreate = true
+				logger.Info("Ports mismatch", "app", app.Name, "info_ports", info.Ports)
 			}
 
 			if needsRecreate {
@@ -174,15 +245,13 @@ func (w *Worker) reconcileApps(ctx context.Context) error {
 					logger.Error("Failed to remove container for update", "container", info.Name, "error", err)
 					continue
 				}
-				// Will be deployed below as it's no longer 'exists' (conceptually, though loop structure makes it tricky)
-				// Actually, since we just removed it, we should fall through to "deploy" logic?
-				// But we are in "if exists" block.
-				// We should ideally continue and let next loop handle it OR treat as missing.
-				// Simplest: just remove, next reconcile loop will create.
-				continue
+				// Mark as missing so we fall through to deploy logic
+				exists = false
 			}
-		} else {
-			// Missing, deploy
+		}
+
+		if !exists {
+			// Missing or just removed, deploy
 			logger.Info("Deploying missing application", "app", app.Name)
 			if err := w.deployApp(ctx, app, containerName); err != nil {
 				logger.Error("Failed to deploy app", "app", app.Name, "error", err)
@@ -239,8 +308,21 @@ func (w *Worker) deployApp(ctx context.Context, app *core.Application, container
 		podName = sanitizeName(pod.Name)
 	}
 
+	// Determine Network Name if valid
+	networkName := ""
+	if app.NetworkID != "" {
+		net, err := w.store.GetNetwork(app.NetworkID)
+		if err != nil {
+			logger.WarnCtx(ctx, "App assigned to non-existent network", "app", app.Name, "network_id", app.NetworkID)
+			// Decide: Fail or run with default?
+			// Let's fail because if user wants custom network, falling back to bridge might be confusing security-wise.
+			return fmt.Errorf("network %s does not exist", app.NetworkID)
+		}
+		networkName = net.Name
+	}
+
 	// Call Container Client
-	_, err = w.container.Run(ctx, containerName, app.Image, ports, env, labels, podName)
+	_, err = w.container.Run(ctx, containerName, app.Image, ports, env, labels, podName, networkName)
 	return err
 }
 

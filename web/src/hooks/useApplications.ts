@@ -46,6 +46,7 @@ export function useApplications() {
   return useQuery({
     queryKey: queryKeys.applications,
     queryFn: listApplications,
+    refetchInterval: 2000,
   })
 }
 
