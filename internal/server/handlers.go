@@ -8,6 +8,7 @@ import (
 	"github.com/AkMo3/simplify/internal/container"
 	"github.com/AkMo3/simplify/internal/core"
 	"github.com/AkMo3/simplify/internal/errors"
+	"github.com/AkMo3/simplify/internal/logger"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -430,6 +431,206 @@ func (s *Server) handleDeleteEnvironment(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := s.store.DeleteEnvironment(id); err != nil {
+		return err
+	}
+
+	writeNoContent(w)
+	return nil
+}
+
+// =============================================================================
+// Pod Handlers
+// =============================================================================
+
+// handleCreatePod creates a new pod
+func (s *Server) handleCreatePod(w http.ResponseWriter, r *http.Request) error {
+	var pod core.Pod
+	if err := json.NewDecoder(r.Body).Decode(&pod); err != nil {
+		return errors.NewInvalidInputErrorWithCause("invalid request body", err)
+	}
+
+	if pod.ID == "" {
+		pod.ID = uuid.New().String()
+	}
+	pod.CreatedAt = time.Now().UTC()
+
+	if pod.Name == "" {
+		return errors.NewInvalidInputErrorWithField("name", "name is required")
+	}
+
+	if err := s.store.CreatePod(&pod); err != nil {
+		return err
+	}
+
+	return writeCreated(w, pod)
+}
+
+// handleListPods returns all pods
+func (s *Server) handleListPods(w http.ResponseWriter, r *http.Request) error {
+	pods, err := s.store.ListPods()
+	if err != nil {
+		return err
+	}
+
+	if pods == nil {
+		pods = []core.Pod{}
+	}
+
+	// Fetch runtime status from container manager
+	podInfos, err := s.container.ListPods(r.Context())
+	if err != nil {
+		// Log error but continue with DB data
+		logger.ErrorCtx(r.Context(), "Error listing pods from engine", "error", err)
+	} else {
+		// Map by Name since DB ID != Podman ID
+		statusMap := make(map[string]string)
+		for _, info := range podInfos {
+			statusMap[info.Name] = info.Status
+		}
+
+		for i := range pods {
+			if status, ok := statusMap[pods[i].Name]; ok {
+				pods[i].Status = status
+			} else {
+				// If not found in engine, it might be stopped/removed or pending creation
+				if pods[i].Status == "" {
+					pods[i].Status = "stopped"
+				}
+			}
+		}
+	}
+
+	return writeSuccess(w, pods)
+}
+
+// handleGetPod returns a single pod by ID
+func (s *Server) handleGetPod(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		return errors.NewInvalidInputErrorWithField("id", "id is required")
+	}
+
+	pod, err := s.store.GetPod(id)
+	if err != nil {
+		return err
+	}
+
+	// Fetch runtime status
+	info, err := s.container.InspectPod(r.Context(), pod.Name)
+	if err != nil {
+		// Log error but return DB state (likely stopped or previous state)
+		logger.ErrorCtx(r.Context(), "Error inspecting pod", "name", pod.Name, "error", err)
+		if pod.Status == "" {
+			pod.Status = "stopped"
+		}
+	} else {
+		pod.Status = info.Status
+	}
+
+	return writeSuccess(w, pod)
+}
+
+// handleDeletePod removes a pod
+func (s *Server) handleDeletePod(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		return errors.NewInvalidInputErrorWithField("id", "id is required")
+	}
+
+	if err := s.store.DeletePod(id); err != nil {
+		return err
+	}
+
+	writeNoContent(w)
+	return nil
+}
+
+// =============================================================================
+// Network Handlers
+// =============================================================================
+
+// handleCreateNetwork creates a new network
+func (s *Server) handleCreateNetwork(w http.ResponseWriter, r *http.Request) error {
+	var network core.Network
+	if err := json.NewDecoder(r.Body).Decode(&network); err != nil {
+		return errors.NewInvalidInputErrorWithCause("invalid request body", err)
+	}
+
+	if network.ID == "" {
+		network.ID = uuid.New().String()
+	}
+	network.CreatedAt = time.Now().UTC()
+
+	if network.Name == "" {
+		return errors.NewInvalidInputErrorWithField("name", "name is required")
+	}
+
+	// Create in DB
+	if err := s.store.CreateNetwork(&network); err != nil {
+		return err
+	}
+
+	// Create in Container Engine
+	id, err := s.container.CreateNetwork(r.Context(), network.Name)
+	if err != nil {
+		return errors.NewInternalErrorWithCause("failed to create network in backend", err)
+	}
+	logger.InfoCtx(r.Context(), "Network created in engine", "name", network.Name, "id", id)
+
+	return writeCreated(w, network)
+}
+
+// handleListNetworks returns all networks
+func (s *Server) handleListNetworks(w http.ResponseWriter, r *http.Request) error {
+	networks, err := s.store.ListNetworks()
+	if err != nil {
+		return err
+	}
+
+	if networks == nil {
+		networks = []core.Network{}
+	}
+
+	// Fetch runtime info
+	netInfos, err := s.container.ListNetworks(r.Context())
+	if err != nil {
+		logger.ErrorCtx(r.Context(), "Error listing networks from engine", "error", err)
+	} else {
+		// Map by Name
+		infoMap := make(map[string]container.NetworkInfo)
+		for _, info := range netInfos {
+			infoMap[info.Name] = info
+		}
+
+		for i := range networks {
+			if info, ok := infoMap[networks[i].Name]; ok {
+				networks[i].Subnet = info.Subnet
+				networks[i].Driver = info.Driver
+			}
+		}
+	}
+
+	return writeSuccess(w, networks)
+}
+
+// handleDeleteNetwork removes a network
+func (s *Server) handleDeleteNetwork(w http.ResponseWriter, r *http.Request) error {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		return errors.NewInvalidInputErrorWithField("id", "id is required")
+	}
+
+	network, err := s.store.GetNetwork(id)
+	if err != nil {
+		return err // NotFound or other
+	}
+
+	// Remove from engine first
+	if err := s.container.RemoveNetwork(r.Context(), network.Name); err != nil {
+		logger.WarnCtx(r.Context(), "Failed to remove network from engine", "name", network.Name, "error", err)
+	}
+
+	if err := s.store.DeleteNetwork(id); err != nil {
 		return err
 	}
 
