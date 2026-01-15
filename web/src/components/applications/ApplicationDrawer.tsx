@@ -7,6 +7,7 @@ import {
   Layers,
   Terminal,
   ArrowRight,
+  Network as NetworkIcon,
 } from 'lucide-react'
 import { Drawer } from '@/components/ui/Drawer'
 import { ContainerStatusBadge, HealthStatusBadge } from '@/components/ui/StatusBadge'
@@ -15,6 +16,9 @@ import { useState, useEffect } from 'react'
 import { PortMappingInput, type PortMappingItem } from './PortMappingInput'
 import { inspectImage, updateApplication } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
+import { useNetworks } from '@/hooks/useNetworks'
+import { usePods } from '@/hooks/usePods'
+import { EditApplicationConnectionModal } from './EditApplicationConnectionModal'
 
 interface ApplicationDrawerProps {
   application: Application | null
@@ -50,6 +54,10 @@ export function ApplicationDrawer({
   const [editedPorts, setEditedPorts] = useState<PortMappingItem[]>([])
   const [exposedPorts, setExposedPorts] = useState<string[]>([])
   const [isSaving, setIsSaving] = useState(false)
+  const [isEditNetworkModalOpen, setIsEditNetworkModalOpen] = useState(false)
+
+  const { data: networks } = useNetworks()
+  const { data: pods } = usePods()
 
   const handleStartEdit = async () => {
     setIsEditingPorts(true)
@@ -332,6 +340,47 @@ export function ApplicationDrawer({
           </div>
         )}
 
+        {/* Connectivity Configuration */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium flex items-center gap-2">
+              <NetworkIcon className="h-4 w-4 text-muted-foreground" />
+              Connectivity
+            </h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setIsEditNetworkModalOpen(true)}
+            >
+              Edit
+            </Button>
+          </div>
+          <div className="py-2 px-3 rounded-md bg-[hsl(0_0%_12%)] border border-border/50">
+            {application.pod_id ? (
+              <div className="flex items-center gap-2 text-sm">
+                <Box className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Attached to Pod:</span>
+                <span className="font-medium text-blue-400">{pods?.find(p => p.id === application.pod_id)?.name || application.pod_id}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Connected to:</span>
+                {application.network_id ? (
+                  <span className="font-medium text-blue-400">
+                    {networks?.find(n => n.id === application.network_id)?.name || 'Unknown Network'}
+                    <span className="text-muted-foreground text-xs ml-1">
+                      ({networks?.find(n => n.id === application.network_id)?.driver || 'custom'})
+                    </span>
+                  </span>
+                ) : (
+                  <span className="font-medium text-muted-foreground">Default Bridge</span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* View Full Details Button */}
         <div className="pt-4 border-t border-border/30">
           <Link to={`/applications/${application.id}`} onClick={onClose}>
@@ -342,6 +391,12 @@ export function ApplicationDrawer({
           </Link>
         </div>
       </div>
+
+      <EditApplicationConnectionModal
+        application={application}
+        isOpen={isEditNetworkModalOpen}
+        onClose={() => setIsEditNetworkModalOpen(false)}
+      />
     </Drawer>
   )
 }

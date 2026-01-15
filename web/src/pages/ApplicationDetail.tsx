@@ -17,6 +17,10 @@ import { Button, Badge, Modal } from '@/components/ui'
 import { useApplication, useDeleteApplication } from '@/hooks/useApplications' // Assuming we might need update hook but using direct api for now or maybe add it 
 import { PortMappingInput, type PortMappingItem } from '@/components/applications/PortMappingInput'
 import { inspectImage, updateApplication } from '@/lib/api'
+import { Network as NetworkIcon } from 'lucide-react'
+import { useNetworks } from '@/hooks/useNetworks'
+import { usePods } from '@/hooks/usePods'
+import { EditApplicationConnectionModal } from '@/components/applications/EditApplicationConnectionModal'
 
 export function ApplicationDetail() {
   const { id } = useParams<{ id: string }>()
@@ -54,6 +58,10 @@ export function ApplicationDetail() {
   const [editedPorts, setEditedPorts] = useState<PortMappingItem[]>([])
   const [exposedPorts, setExposedPorts] = useState<string[]>([])
   const [isSaving, setIsSaving] = useState(false)
+  const [isEditNetworkModalOpen, setIsEditNetworkModalOpen] = useState(false)
+
+  const { data: networks } = useNetworks()
+  const { data: pods } = usePods()
 
   const handleStartEdit = async () => {
     if (!app) return
@@ -246,6 +254,51 @@ export function ApplicationDetail() {
                 <dd className="mt-1 text-sm">{formatDate(app.updated_at)}</dd>
               </div>
             </dl>
+          </motion.div>
+
+          {/* Connectivity Configuration */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="card p-6"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-medium flex items-center gap-2">
+                <NetworkIcon className="h-5 w-5 text-muted-foreground" />
+                Connectivity
+              </h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsEditNetworkModalOpen(true)}
+              >
+                Edit
+              </Button>
+            </div>
+            {app.pod_id ? (
+              <div className="bg-muted/50 rounded-md p-3 text-sm">
+                <span className="text-muted-foreground block mb-1">Attached to Pod:</span>
+                <span className="font-medium text-blue-400 font-mono flex items-center gap-2">
+                  <Box className="h-4 w-4" />
+                  {pods?.find(p => p.id === app.pod_id)?.name || app.pod_id}
+                </span>
+              </div>
+            ) : (
+              <div className="bg-muted/50 rounded-md p-3 text-sm">
+                <span className="text-muted-foreground block mb-1">Connected to:</span>
+                {app.network_id ? (
+                  <span className="font-medium text-blue-400 flex items-center gap-2">
+                    {networks?.find(n => n.id === app.network_id)?.name || 'Unknown Network'}
+                    <Badge variant="outline" className="text-xs font-normal">
+                      {networks?.find(n => n.id === app.network_id)?.driver || 'custom'}
+                    </Badge>
+                  </span>
+                ) : (
+                  <span className="font-medium text-muted-foreground">Default Bridge</span>
+                )}
+              </div>
+            )}
           </motion.div>
 
           {/* Ports */}
@@ -464,6 +517,11 @@ export function ApplicationDetail() {
           </div>
         </div>
       </Modal>
+      <EditApplicationConnectionModal
+        application={app}
+        isOpen={isEditNetworkModalOpen}
+        onClose={() => setIsEditNetworkModalOpen(false)}
+      />
     </div>
   )
 }
