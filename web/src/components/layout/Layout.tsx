@@ -1,11 +1,23 @@
+
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Box, Activity, Settings, Search, X } from 'lucide-react'
+import {
+  LayoutDashboard,
+  Box,
+  Activity,
+  Settings,
+  Search,
+  X,
+  Cuboid,
+  Network,
+} from 'lucide-react'
 import { useSearch } from '@/contexts/SearchContext'
 import { useRef, useEffect } from 'react'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/applications', icon: Box, label: 'Applications' },
+  { to: '/pods', icon: Cuboid, label: 'Pods' },
+  { to: '/networks', icon: Network, label: 'Networks' },
   { to: '/health', icon: Activity, label: 'Health' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ]

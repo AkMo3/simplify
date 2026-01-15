@@ -2,18 +2,23 @@ import { useState, useEffect, type FormEvent } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Button, Input, Modal } from '@/components/ui'
 import { useCreateApplication } from '@/hooks/useApplications'
+import { usePods } from '@/hooks/usePods'
+import { useNetworks } from '@/hooks/useNetworks'
 import { ApiClientError, inspectImage } from '@/lib/api'
 import { PortMappingInput, type PortMappingItem } from './PortMappingInput'
 
 interface CreateApplicationFormProps {
   isOpen: boolean
   onClose: () => void
+  initialPodId?: string
 }
 
 interface FormData {
   name: string
   image: string
   replicas: string
+  podId: string
+  networkId: string
 }
 
 interface FormErrors {
@@ -24,17 +29,21 @@ interface FormErrors {
   general?: string
 }
 
-export function CreateApplicationForm({ isOpen, onClose }: CreateApplicationFormProps) {
+export function CreateApplicationForm({ isOpen, onClose, initialPodId }: CreateApplicationFormProps) {
   const [formData, setFormData] = useState<FormData>({
     name: '',
     image: '',
     replicas: '1',
+    podId: initialPodId || '',
+    networkId: '',
   })
   const [ports, setPorts] = useState<PortMappingItem[]>([])
   const [errors, setErrors] = useState<FormErrors>({})
   const [inspecting, setInspecting] = useState(false)
   const [exposedPorts, setExposedPorts] = useState<string[]>([])
 
+  const { data: pods } = usePods()
+  const { data: networks } = useNetworks()
   const createMutation = useCreateApplication()
 
   // Debounced image inspection
@@ -112,6 +121,8 @@ export function CreateApplicationForm({ isOpen, onClose }: CreateApplicationForm
         name: formData.name.trim(),
         image: formData.image.trim(),
         replicas: parseInt(formData.replicas, 10),
+        pod_id: formData.podId || undefined,
+        network_id: formData.networkId || undefined,
         ports: validPorts,
       })
 
@@ -130,7 +141,7 @@ export function CreateApplicationForm({ isOpen, onClose }: CreateApplicationForm
   }
 
   const handleClose = () => {
-    setFormData({ name: '', image: '', replicas: '1' })
+    setFormData({ name: '', image: '', replicas: '1', podId: initialPodId || '', networkId: '' })
     setPorts([])
     setExposedPorts([])
     setErrors({})
@@ -182,6 +193,72 @@ export function CreateApplicationForm({ isOpen, onClose }: CreateApplicationForm
 
         </div>
 
+        {/* Pod Selection */}
+        <div className="space-y-1">
+          <label className="text-sm font-medium mb-1.5 block">Pod (Optional)</label>
+          <select
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            value={formData.podId}
+            onChange={(e) => {
+              const val = e.target.value
+              setFormData((prev) => ({
+                ...prev,
+                podId: val,
+                networkId: val ? '' : prev.networkId // Clear network if pod selected
+              }))
+            }}
+            disabled={!!formData.networkId}
+          >
+            <option value="">None (Standalone)</option>
+            {pods?.map((pod) => (
+              <option key={pod.id} value={pod.id}>
+                {pod.name}
+              </option>
+            ))}
+          </select>
+          {formData.networkId && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Pod selection is disabled because a Network is selected.
+            </p>
+          )}
+          {formData.podId && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Application will run inside the selected pod's network namespace.
+              External ports should be managed at the Pod level.
+            </p>
+          )}
+        </div>
+
+        {/* Network Selection */}
+        <div className="space-y-1">
+          <label className="text-sm font-medium mb-1.5 block">Network (Optional)</label>
+          <select
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            value={formData.networkId}
+            onChange={(e) => {
+              const val = e.target.value
+              setFormData((prev) => ({
+                ...prev,
+                networkId: val,
+                podId: val ? '' : prev.podId // Clear pod if network selected
+              }))
+            }}
+            disabled={!!formData.podId}
+          >
+            <option value="">None (Default Bridge)</option>
+            {networks?.map((net) => (
+              <option key={net.id} value={net.id}>
+                {net.name} ({net.driver})
+              </option>
+            ))}
+          </select>
+          {formData.podId && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Network selection is disabled because a Pod is selected.
+            </p>
+          )}
+        </div>
+
         <div>
           <label className="text-sm font-medium mb-1.5 block">Port Mappings</label>
           <PortMappingInput
@@ -214,6 +291,6 @@ export function CreateApplicationForm({ isOpen, onClose }: CreateApplicationForm
           </Button>
         </div>
       </form>
-    </Modal>
+    </Modal >
   )
 }
