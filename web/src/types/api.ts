@@ -5,6 +5,8 @@ export interface Application {
   image: string
   status: ContainerStatus
   replicas: number
+  pod_id?: string
+  network_id?: string
   health_check?: HealthCheckConfig
   health_status: HealthCheckStatus
   ports: Record<string, string>
@@ -42,6 +44,8 @@ export interface CreateApplicationRequest {
   image: string
   environment_id?: string
   replicas?: number
+  pod_id?: string
+  network_id?: string
   ports?: Record<string, string>
   env_vars?: Record<string, string>
   health_check?: HealthCheckConfig
@@ -52,6 +56,8 @@ export interface UpdateApplicationRequest {
   image: string
   environment_id?: string
   replicas?: number
+  pod_id?: string
+  network_id?: string
   ports?: Record<string, string>
   env_vars?: Record<string, string>
   health_check?: HealthCheckConfig
@@ -90,6 +96,7 @@ export type ContainerStatus =
   | 'stopping'
   | 'stopped'
   | 'error'
+  | 'created'
 
 export type HealthCheckStatus = 'healthy' | 'unhealthy' | 'starting' | 'none'
 
@@ -104,3 +111,29 @@ export interface ImageInfo {
   id: string
   exposed_ports: string[]
 }
+
+export interface Pod {
+  id: string
+  created_at: string
+  name: string
+  ports: Record<string, string>
+  status: string
+}
+
+export interface CreatePodRequest {
+  name: string
+  ports: Record<string, string>
+}
+
+export interface Network {
+  id: string
+  created_at: string
+  name: string
+  subnet: string
+  driver: string
+}
+
+export interface CreateNetworkRequest {
+  name: string
+}
+

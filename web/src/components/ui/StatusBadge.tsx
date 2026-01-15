@@ -15,6 +15,10 @@ const containerStatusConfig: Record<ContainerStatus, { label: string; className:
     label: 'Creating',
     className: 'bg-blue-500/15 text-blue-400',
   },
+  created: {
+    label: 'Created',
+    className: 'bg-emerald-500/15 text-emerald-400',
+  },
   running: {
     label: 'Running',
     className: 'bg-emerald-500/15 text-emerald-400',
@@ -52,6 +56,7 @@ export function ContainerStatusBadge({ status, className }: ContainerStatusBadge
         className={cn(
           'h-1.5 w-1.5 rounded-full',
           status === 'running' && 'bg-emerald-400 animate-pulse',
+          status === 'created' && 'bg-emerald-400 animate-pulse',
           status === 'creating' && 'bg-blue-400 animate-pulse',
           status === 'restarting' && 'bg-yellow-400 animate-pulse',
           status === 'stopping' && 'bg-orange-400',

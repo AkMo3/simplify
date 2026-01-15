@@ -6,6 +6,10 @@ import type {
   ReadinessStatus,
   ApiError,
   ImageInfo,
+  Pod,
+  CreatePodRequest,
+  Network,
+  CreateNetworkRequest,
 } from '@/types/api'
 
 const API_BASE = '/api/v1'
@@ -115,4 +119,50 @@ export async function deleteApplication(id: string): Promise<void> {
 
 export async function inspectImage(image: string): Promise<ImageInfo> {
   return fetchApi<ImageInfo>(`/images/inspect?image=${encodeURIComponent(image)}`)
+}
+
+// =============================================================================
+// Pod Endpoints
+// =============================================================================
+
+export async function listPods(): Promise<Pod[]> {
+  return fetchApi<Pod[]>('/pods')
+}
+
+export async function getPod(id: string): Promise<Pod> {
+  return fetchApi<Pod>(`/pods/${id}`)
+}
+
+export async function createPod(data: CreatePodRequest): Promise<Pod> {
+  return fetchApi<Pod>('/pods', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deletePod(id: string): Promise<void> {
+  return fetchApi<void>(`/pods/${id}`, {
+    method: 'DELETE',
+  })
+}
+
+// =============================================================================
+// Network Endpoints
+// =============================================================================
+
+export async function listNetworks(): Promise<Network[]> {
+  return fetchApi<Network[]>('/networks')
+}
+
+export async function createNetwork(data: CreateNetworkRequest): Promise<Network> {
+  return fetchApi<Network>('/networks', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function deleteNetwork(id: string): Promise<void> {
+  return fetchApi<void>(`/networks/${id}`, {
+    method: 'DELETE',
+  })
 }
