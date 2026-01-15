@@ -3,8 +3,10 @@ package cli
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/AkMo3/simplify/internal/config"
+	"github.com/AkMo3/simplify/internal/logger"
 	"github.com/spf13/cobra"
 )
 
@@ -48,8 +50,28 @@ func Execute() error {
 }
 
 func init() {
+	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", config.DefaultConfigPath, "config file path")
+
+	// Initialize logger after config is loaded but before command execution
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		return initLogger()
+	}
+
 	rootCmd.AddCommand(versionCmd)
+}
+
+// initConfig reads in config file and ENV variables if set.
+func initConfig() {
+	if err := config.Load(cfgFile); err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// initLogger initializes the logger
+func initLogger() error {
+	return logger.Init()
 }
 
 // GetConfigPath returns the config file path from flag

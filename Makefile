@@ -26,6 +26,10 @@ run: build
 run-server: build
 	./bin/$(BINARY_NAME) server
 
+# Run with hot reload (requires air)
+dev:
+	air -c air.toml
+
 # Install to GOPATH/bin
 install:
 	go install -tags "$(BUILD_TAGS)" $(LDFLAGS) ./cmd/simplify
