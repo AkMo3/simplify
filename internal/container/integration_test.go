@@ -64,7 +64,7 @@ func TestIntegration_RunAndRemove(t *testing.T) {
 	_ = client.Remove(ctx, containerName, true)
 
 	// Run a container
-	id, err := client.Run(ctx, containerName, "docker.io/library/alpine:latest", nil, []string{"TEST_VAR=hello"}, nil)
+	id, err := client.Run(ctx, containerName, "docker.io/library/alpine:latest", nil, []string{"TEST_VAR=hello"}, nil, "")
 	require.NoError(t, err, "Failed to run container")
 	assert.NotEmpty(t, id, "Container ID should not be empty")
 	assert.Len(t, id, 64, "Container ID should be 64 characters")
@@ -89,7 +89,7 @@ func TestIntegration_RunWithPorts(t *testing.T) {
 		18080: 80,
 	}
 
-	id, err := client.Run(ctx, containerName, "docker.io/library/nginx:alpine", ports, nil, nil)
+	id, err := client.Run(ctx, containerName, "docker.io/library/nginx:alpine", ports, nil, nil, "")
 	require.NoError(t, err, "Failed to run container with ports")
 	assert.NotEmpty(t, id)
 
@@ -123,7 +123,7 @@ func TestIntegration_StopContainer(t *testing.T) {
 	_ = client.Remove(ctx, containerName, true)
 
 	// Run a container (nginx stays running)
-	_, err := client.Run(ctx, containerName, "docker.io/library/nginx:alpine", nil, nil, nil)
+	_, err := client.Run(ctx, containerName, "docker.io/library/nginx:alpine", nil, nil, nil, "")
 	require.NoError(t, err)
 
 	// Verify it's running
@@ -186,7 +186,7 @@ func TestIntegration_List(t *testing.T) {
 	_ = client.Remove(ctx, containerName, true)
 
 	// Run a container
-	_, err := client.Run(ctx, containerName, "docker.io/library/alpine:latest", nil, nil, nil)
+	_, err := client.Run(ctx, containerName, "docker.io/library/alpine:latest", nil, nil, nil, "")
 	require.NoError(t, err)
 
 	// List all containers
@@ -223,7 +223,7 @@ func TestIntegration_RemoveForce(t *testing.T) {
 	_ = client.Remove(ctx, containerName, true)
 
 	// Run a container (nginx stays running)
-	_, err := client.Run(ctx, containerName, "docker.io/library/nginx:alpine", nil, nil, nil)
+	_, err := client.Run(ctx, containerName, "docker.io/library/nginx:alpine", nil, nil, nil, "")
 	require.NoError(t, err)
 
 	// Try to remove without force - should fail
@@ -263,11 +263,11 @@ func TestIntegration_RunDuplicateName(t *testing.T) {
 	_ = client.Remove(ctx, containerName, true)
 
 	// Run first container
-	_, err := client.Run(ctx, containerName, "docker.io/library/alpine:latest", nil, nil, nil)
+	_, err := client.Run(ctx, containerName, "docker.io/library/alpine:latest", nil, nil, nil, "")
 	require.NoError(t, err)
 
 	// Try to run with same name - should fail
-	_, err = client.Run(ctx, containerName, "docker.io/library/alpine:latest", nil, nil, nil)
+	_, err = client.Run(ctx, containerName, "docker.io/library/alpine:latest", nil, nil, nil, "")
 	assert.Error(t, err, "Should fail when container with same name exists")
 
 	err = client.Remove(ctx, containerName, true)
@@ -290,7 +290,7 @@ func TestIntegration_RunWithLabels(t *testing.T) {
 		"com.example.id":      "12345",
 	}
 
-	id, err := client.Run(ctx, containerName, "docker.io/library/alpine:latest", nil, nil, labels)
+	id, err := client.Run(ctx, containerName, "docker.io/library/alpine:latest", nil, nil, labels, "")
 	require.NoError(t, err)
 	assert.NotEmpty(t, id)
 

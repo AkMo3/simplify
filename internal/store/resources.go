@@ -3,6 +3,42 @@ package store
 import "github.com/AkMo3/simplify/internal/core"
 
 // =============================================================================
+// Pod Methods
+// =============================================================================
+
+// CreatePod stores a new pod. Overwrites if ID exists.
+func (s *Store) CreatePod(pod *core.Pod) error {
+	return s.genericCreate(BucketPods, pod.ID, pod)
+}
+
+// GetPod retrieves a pod by ID.
+// Returns NotFoundError if the pod doesn't exist.
+func (s *Store) GetPod(id string) (*core.Pod, error) {
+	return genericGet[core.Pod](s, BucketPods, id)
+}
+
+// ListPods returns all pods.
+func (s *Store) ListPods() ([]core.Pod, error) {
+	return genericList[core.Pod](s, BucketPods)
+}
+
+// UpdatePod updates an existing pod.
+// Returns NotFoundError if the pod doesn't exist.
+func (s *Store) UpdatePod(pod *core.Pod) error {
+	return s.genericUpdate(BucketPods, pod.ID, pod)
+}
+
+// DeletePod removes a pod by ID.
+func (s *Store) DeletePod(id string) error {
+	return s.genericDelete(BucketPods, id)
+}
+
+// PodExists checks if a pod exists.
+func (s *Store) PodExists(id string) (bool, error) {
+	return s.genericExists(BucketPods, id)
+}
+
+// =============================================================================
 // Application Methods
 // =============================================================================
 

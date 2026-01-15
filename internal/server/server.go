@@ -99,6 +99,17 @@ func (s *Server) setupRoutes() {
 
 		// Images
 		r.Get("/images/inspect", WrapHandler(s.handleInspectImage))
+
+		// Pods
+		r.Post("/pods", WrapHandler(s.handleCreatePod))
+		r.Get("/pods", WrapHandler(s.handleListPods))
+		r.Get("/pods/{id}", WrapHandler(s.handleGetPod))
+		r.Delete("/pods/{id}", WrapHandler(s.handleDeletePod))
+
+		// Networks
+		r.Post("/networks", WrapHandler(s.handleCreateNetwork))
+		r.Get("/networks", WrapHandler(s.handleListNetworks))
+		r.Delete("/networks/{id}", WrapHandler(s.handleDeleteNetwork))
 	})
 }
 

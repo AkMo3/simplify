@@ -54,6 +54,54 @@ func (w *Worker) Start(ctx context.Context) {
 }
 
 func (w *Worker) reconcile(ctx context.Context) error {
+	// 1. Reconcile Pods
+	if err := w.reconcilePods(ctx); err != nil {
+		return fmt.Errorf("failed to reconcile pods: %w", err)
+	}
+
+	// 2. Reconcile Applications
+	return w.reconcileApps(ctx)
+}
+
+func (w *Worker) reconcilePods(ctx context.Context) error {
+	pods, err := w.store.ListPods()
+	if err != nil {
+		return fmt.Errorf("listing db pods: %w", err)
+	}
+
+	// For each pod in DB, ensure it exists in Podman
+	// Note: We don't have a ListPods in interface yet, so we just check existence.
+	// Efficient logic would be to List all pods from Podman first.
+	// But let's stick to simple existence check for now as we added PodExists methods.
+	// Limitation: We won't remove orphaned Pods (yet).
+
+	for _, pod := range pods {
+		podName := sanitizeName(pod.Name)
+		exists, err := w.container.PodExists(ctx, podName)
+		if err != nil {
+			logger.Error("Failed to check pod existence", "pod", podName, "error", err)
+			continue
+		}
+
+		if !exists {
+			logger.InfoCtx(ctx, "Creating missing pod", "pod", podName)
+			// Convert ports map[string]string -> map[uint16]uint16
+			ports, err := parsePorts(pod.Ports)
+			if err != nil {
+				logger.Error("Invalid ports for pod", "pod", podName, "error", err)
+				continue
+			}
+
+			if _, err := w.container.CreatePod(ctx, podName, ports); err != nil {
+				logger.Error("Failed to create pod", "pod", podName, "error", err)
+			}
+		}
+	}
+	// TODO: Cleanup orphaned pods (requires List API in ContainerManager)
+	return nil
+}
+
+func (w *Worker) reconcileApps(ctx context.Context) error {
 	apps, err := w.store.ListApplications()
 	if err != nil {
 		return fmt.Errorf("failed to list applications: %w", err)
@@ -93,81 +141,61 @@ func (w *Worker) reconcile(ctx context.Context) error {
 
 	desiredContainerNames := make(map[string]bool)
 
-	// Use index to avoid copying large struct on each iteration
 	for i := range apps {
 		app := &apps[i]
 
 		// Construct the expected container name
-		// We use app.Name but sanitized
 		containerName := sanitizeName(app.Name)
 		if containerName == "" {
-			// Fallback
 			containerName = fmt.Sprintf("simplify-%s", app.ID)
 		}
-		// Desired state tracking
 		desiredContainerNames[containerName] = true
 
 		// Check if it exists by AppID
 		if info, exists := existingApps[app.ID]; exists {
-			// If exists, is it running?
-			// Update the container name for tracking desired state (in case we want to reference it)
-			// But wait, desiredContainerNames is used for orphan cleanup.
-			// Current implementation of orphan cleanup iterates existingContainers.
-			// We should track which containers are KEPT.
 			desiredContainerNames[info.Name] = true
 
+			// Check if we need to recreate
+			needsRecreate := false
 			if info.Status != "running" && !strings.HasPrefix(info.Status, "Up") {
-				// For Podman, simpler to remove and recreate to ensure config is fresh
-				// TODO: In production, we'd use Start() if config matches.
-				if err := w.container.Remove(ctx, info.Name, true); err != nil {
-					logger.Error("Failed to remove stopped container",
-						"container", info.Name,
-						"error", err)
-					continue
-				}
-				// It will be recreated in next loop iteration
-				continue
+				needsRecreate = true
+			} else if app.PodID == "" && !checkPortsMatch(app.Ports, info.Ports) {
+				// Only check ports match if NOT in a pod.
+				// If in a pod, app ports are internal or managed by pod, checking container ports might be misleading
+				// as container ports in pod often show as empty or differently.
+				// For now, skip port check if in Pod.
+				needsRecreate = true
+				logger.Info("Ports mismatch", "app", app.Name, "pod", app.PodID, "info_ports", info.Ports)
 			}
-			// It's running. Check if config matches
-			if !checkPortsMatch(app.Ports, info.Ports) {
-				logger.Info("Container ports mismatch, recreating",
-					"container", info.Name,
-					"app_id", app.ID)
+
+			if needsRecreate {
+				logger.Info("Recreating container", "container", info.Name)
 				if err := w.container.Remove(ctx, info.Name, true); err != nil {
-					logger.Error("Failed to remove container with outgoing ports",
-						"container", info.Name,
-						"error", err)
+					logger.Error("Failed to remove container for update", "container", info.Name, "error", err)
 					continue
 				}
-				// Recreated in next loop
+				// Will be deployed below as it's no longer 'exists' (conceptually, though loop structure makes it tricky)
+				// Actually, since we just removed it, we should fall through to "deploy" logic?
+				// But we are in "if exists" block.
+				// We should ideally continue and let next loop handle it OR treat as missing.
+				// Simplest: just remove, next reconcile loop will create.
 				continue
 			}
 		} else {
-			// It does not exist. Create it.
-			logger.Info("Deploying missing application",
-				"app", app.Name,
-				"id", app.ID)
-			// We still use standard naming for creation, but now with labels
-			desiredContainerNames[containerName] = true
+			// Missing, deploy
+			logger.Info("Deploying missing application", "app", app.Name)
 			if err := w.deployApp(ctx, app, containerName); err != nil {
-				logger.Error("Failed to deploy app",
-					"app", app.Name,
-					"error", err)
+				logger.Error("Failed to deploy app", "app", app.Name, "error", err)
 			}
 		}
 	}
 
-	// Cleanup Orphans (Actual -> Desired)
-	// Any container starting with "simplify-" that is NOT in desiredContainerNames
-	// Cleanup Orphans (Actual -> Desired)
-	// Any managed container that is NOT in desiredContainerNames
+	// Cleanup Orphans
 	for name := range managedContainers {
 		if !desiredContainerNames[name] {
 			logger.Info("Removing orphaned container", "container", name)
 			if err := w.container.Remove(ctx, name, true); err != nil {
-				logger.Error("Failed to remove orphan",
-					"container", name,
-					"error", err)
+				logger.Error("Failed to remove orphan", "container", name, "error", err)
 			}
 		}
 	}
@@ -197,8 +225,22 @@ func (w *Worker) deployApp(ctx context.Context, app *core.Application, container
 		"simplify.app.name": app.Name,
 	}
 
+	// Determine Pod Name if valid
+	podName := ""
+	if app.PodID != "" {
+		pod, err := w.store.GetPod(app.PodID)
+		if err != nil {
+			logger.WarnCtx(ctx, "App assigned to non-existent pod", "app", app.Name, "pod_id", app.PodID)
+			// Decide: Fail or run standalone?
+			// Let's run standalone but log warning, OR better: fail to deploy until Pod is ready.
+			return fmt.Errorf("pod %s does not exist", app.PodID)
+		}
+		// Use Pod Name. Podman uses name for associating containers.
+		podName = sanitizeName(pod.Name)
+	}
+
 	// Call Container Client
-	_, err = w.container.Run(ctx, containerName, app.Image, ports, env, labels)
+	_, err = w.container.Run(ctx, containerName, app.Image, ports, env, labels, podName)
 	return err
 }
 

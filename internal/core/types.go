@@ -42,4 +42,24 @@ type Application struct {
 	Status        string            `json:"status"`
 	HealthStatus  string            `json:"health_status"`
 	Replicas      int               `json:"replicas"`
+	PodID         string            `json:"pod_id,omitempty"`
+	NetworkID     string            `json:"network_id,omitempty"`
+}
+
+// Pod represents a shared network namespace for multiple applications
+type Pod struct {
+	CreatedAt time.Time         `json:"created_at"`
+	ID        string            `json:"id"`
+	Name      string            `json:"name"`
+	Ports     map[string]string `json:"ports"` // Host:Container
+	Status    string            `json:"status"`
+}
+
+// Network represents a bridge network for container communication
+type Network struct {
+	CreatedAt time.Time `json:"created_at"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Subnet    string    `json:"subnet"`
+	Driver    string    `json:"driver"`
 }

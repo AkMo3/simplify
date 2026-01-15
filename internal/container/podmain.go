@@ -12,6 +12,9 @@ import (
 	"github.com/containers/podman/v5/pkg/bindings"
 	"github.com/containers/podman/v5/pkg/bindings/containers"
 	"github.com/containers/podman/v5/pkg/bindings/images"
+	"github.com/containers/podman/v5/pkg/bindings/network"
+	"github.com/containers/podman/v5/pkg/bindings/pods"
+	"github.com/containers/podman/v5/pkg/domain/entities"
 	"github.com/containers/podman/v5/pkg/specgen"
 	nettypes "go.podman.io/common/libnetwork/types"
 )
@@ -52,7 +55,7 @@ func (c *Client) Context() context.Context {
 }
 
 // Run creates and starts a container
-func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string, labels map[string]string) (string, error) {
+func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string, labels map[string]string, podName string) (string, error) {
 	logger.DebugCtx(ctx, "Checking if image exists", "image", image)
 
 	// Pull image if not exists
@@ -76,7 +79,23 @@ func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]u
 	s.Env = envSliceToMap(env)
 	s.Labels = labels
 
-	if len(ports) > 0 {
+	if podName != "" {
+		s.Pod = podName
+		// When in a pod, ports are ignored here (handled by pod) typically,
+		// but if we want to expose ports from the container specifically (uncommon in shared net),
+		// we can. However, usually ports are on the Pod.
+		// For now, if PodName is set, we skip port mapping on the container
+		// OR we can assume the caller knows what they are doing.
+		// If we are sharing net namespace, ports on container usually conflict or simply don't make sense
+		// if they are meant to be external.
+		// BUT the user plan says: "Pods define external ports; Apps define internal ports."
+		// So if podName is set, we likely SHOULD NOT set PortMappings on the container spec
+		// unless we want double mapping or something.
+		// Let's omit port mappings if in a Pod, to be safe.
+		if len(ports) > 0 {
+			logger.DebugCtx(ctx, "Ignoring container ports because running in a Pod", "pod", podName)
+		}
+	} else if len(ports) > 0 {
 		s.PortMappings = make([]nettypes.PortMapping, 0, len(ports))
 		for hostPort, containerPort := range ports {
 			logger.DebugCtx(ctx, "Adding port mapping",
@@ -368,4 +387,172 @@ func formatPorts(ports []nettypes.PortMapping) map[string]string {
 // ptrBool creates a bool pointer
 func ptrBool(b bool) *bool {
 	return &b
+}
+
+// CreatePod creates a new pod
+func (c *Client) CreatePod(ctx context.Context, name string, ports map[uint16]uint16) (string, error) {
+	logger.DebugCtx(ctx, "Creating pod", "name", name)
+
+	s := specgen.NewPodSpecGenerator()
+	s.Name = name
+
+	// Configure ports
+	if len(ports) > 0 {
+		s.PortMappings = make([]nettypes.PortMapping, 0, len(ports))
+		for hostPort, containerPort := range ports {
+			s.PortMappings = append(s.PortMappings, nettypes.PortMapping{
+				HostIP:        "127.0.0.1", // Default to localhost for safety
+				HostPort:      hostPort,
+				ContainerPort: containerPort,
+				Protocol:      "tcp",
+			})
+		}
+	}
+
+	// Create the pod
+	// CreatePodFromSpec expects entities.PodSpec which wraps PodSpecGen
+	spec := &entities.PodSpec{
+		PodSpecGen: *s,
+	}
+
+	response, err := pods.CreatePodFromSpec(c.ctx, spec)
+	if err != nil {
+		return "", fmt.Errorf("creating pod: %w", err)
+	}
+
+	logger.InfoCtx(ctx, "Pod created", "name", name, "id", response.Id[:12])
+	return response.Id, nil
+}
+
+// RemovePod removes a pod
+func (c *Client) RemovePod(ctx context.Context, nameOrID string, force bool) error {
+	logger.DebugCtx(ctx, "Removing pod", "name", nameOrID, "force", force)
+
+	_, err := pods.Remove(c.ctx, nameOrID, &pods.RemoveOptions{Force: &force})
+	if err != nil {
+		return fmt.Errorf("removing pod: %w", err)
+	}
+
+	return nil
+}
+
+// PodExists checks if a pod exists
+func (c *Client) PodExists(ctx context.Context, nameOrID string) (bool, error) {
+	exists, err := pods.Exists(c.ctx, nameOrID, nil)
+	if err != nil {
+		return false, fmt.Errorf("checking pod existence: %w", err)
+	}
+	return exists, nil
+}
+
+// ListPods returns a list of all pods
+func (c *Client) ListPods(ctx context.Context) ([]PodInfo, error) {
+	logger.DebugCtx(ctx, "Listing pods")
+
+	reports, err := pods.List(c.ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("listing pods: %w", err)
+	}
+
+	result := make([]PodInfo, 0, len(reports))
+	for _, p := range reports {
+		result = append(result, PodInfo{
+			ID:      p.Id[:12],
+			Name:    p.Name,
+			Status:  p.Status,
+			Created: p.Created,
+		})
+	}
+
+	return result, nil
+}
+
+// InspectPod returns information about a specific pod
+func (c *Client) InspectPod(ctx context.Context, nameOrID string) (*PodInfo, error) {
+	logger.DebugCtx(ctx, "Inspecting pod", "name", nameOrID)
+
+	data, err := pods.Inspect(c.ctx, nameOrID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("inspecting pod: %w", err)
+	}
+
+	return &PodInfo{
+		ID:      data.ID[:12],
+		Name:    data.Name,
+		Status:  data.State,
+		Created: data.Created,
+	}, nil
+}
+
+// CreateNetwork creates a new bridge network
+func (c *Client) CreateNetwork(ctx context.Context, name string) (string, error) {
+	logger.DebugCtx(ctx, "Creating network", "name", name)
+
+	// In this version of bindings, it seems we pass the Network struct directly?
+	// Based on error: want (context.Context, *"go.podman.io/common/libnetwork/types".Network)
+	net := &nettypes.Network{
+		Name:   name,
+		Driver: "bridge",
+	}
+
+	// Assuming network.Create returns (*types.NetworkCreateReport, error) or similar
+	// Let's try matching the signature "want (context.Context, *types.Network)"
+	// Wait, network.Create in bindings v5 usually takes (*types.Network, *network.CreateOptions) or similar?
+	// The error says it WANTS (ctx, *Network).
+	// Let's try just passing the network struct.
+
+	// Note: We might need to check if response is just the network struct back or a report.
+	// If it returns (newNet, err), then we use newNet.ID.
+
+	newNet, err := network.Create(c.ctx, net)
+	if err != nil {
+		return "", fmt.Errorf("creating network: %w", err)
+	}
+
+	logger.InfoCtx(ctx, "Network created", "name", name, "id", newNet.ID)
+	return newNet.ID, nil
+}
+
+// RemoveNetwork removes a network
+func (c *Client) RemoveNetwork(ctx context.Context, nameOrID string) error {
+	logger.DebugCtx(ctx, "Removing network", "name", nameOrID)
+
+	// Force removal? Maybe careful.
+	force := false
+	_, err := network.Remove(c.ctx, nameOrID, &network.RemoveOptions{Force: &force})
+	if err != nil {
+		return fmt.Errorf("removing network: %w", err)
+	}
+
+	return nil
+}
+
+// ListNetworks lists all networks
+func (c *Client) ListNetworks(ctx context.Context) ([]NetworkInfo, error) {
+	logger.DebugCtx(ctx, "Listing networks")
+
+	reports, err := network.List(c.ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("listing networks: %w", err)
+	}
+
+	result := make([]NetworkInfo, 0, len(reports))
+	for _, n := range reports {
+		// Filter out standard networks if we want to show only user-created?
+		// For now show all, maybe filter 'host', 'none' in UI
+		subnet := ""
+		if len(n.Subnets) > 0 {
+			subnet = n.Subnets[0].Subnet.String()
+		}
+
+		result = append(result, NetworkInfo{
+			ID:      n.ID[:12],
+			Name:    n.Name,
+			Driver:  n.Driver,
+			Subnet:  subnet,
+			Created: n.Created,
+		})
+	}
+
+	return result, nil
 }

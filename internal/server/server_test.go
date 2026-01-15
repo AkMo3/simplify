@@ -23,9 +23,11 @@ import (
 type MockContainerManager struct {
 	ListFunc         func(ctx context.Context, all bool) ([]container.ContainerInfo, error)
 	InspectImageFunc func(ctx context.Context, image string) (*container.ImageInfo, error)
+	ListPodsFunc     func(ctx context.Context) ([]container.PodInfo, error)
+	InspectPodFunc   func(ctx context.Context, nameOrID string) (*container.PodInfo, error)
 }
 
-func (m *MockContainerManager) Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string, labels map[string]string) (string, error) {
+func (m *MockContainerManager) Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string, labels map[string]string, podName string) (string, error) {
 	return "mock-id", nil
 }
 func (m *MockContainerManager) Stop(ctx context.Context, name string, timeout *uint) error {
@@ -51,6 +53,40 @@ func (m *MockContainerManager) InspectImage(ctx context.Context, image string) (
 		return m.InspectImageFunc(ctx, image)
 	}
 	return &container.ImageInfo{ID: "mock-image-id", ExposedPorts: []string{"80/tcp"}}, nil
+}
+func (m *MockContainerManager) CreatePod(ctx context.Context, name string, ports map[uint16]uint16) (string, error) {
+	return "mock-pod-id", nil
+}
+func (m *MockContainerManager) RemovePod(ctx context.Context, nameOrID string, force bool) error {
+	return nil
+}
+func (m *MockContainerManager) PodExists(ctx context.Context, nameOrID string) (bool, error) {
+	return true, nil
+}
+func (m *MockContainerManager) ListPods(ctx context.Context) ([]container.PodInfo, error) {
+	if m.ListPodsFunc != nil {
+		return m.ListPodsFunc(ctx)
+	}
+	return []container.PodInfo{}, nil
+}
+func (m *MockContainerManager) InspectPod(ctx context.Context, nameOrID string) (*container.PodInfo, error) {
+	if m.InspectPodFunc != nil {
+		return m.InspectPodFunc(ctx, nameOrID)
+	}
+	return &container.PodInfo{
+		ID:     "mock-pod-id",
+		Name:   nameOrID,
+		Status: "Running",
+	}, nil
+}
+func (m *MockContainerManager) CreateNetwork(ctx context.Context, name string) (string, error) {
+	return "mock-net-id", nil
+}
+func (m *MockContainerManager) RemoveNetwork(ctx context.Context, nameOrID string) error {
+	return nil
+}
+func (m *MockContainerManager) ListNetworks(ctx context.Context) ([]container.NetworkInfo, error) {
+	return []container.NetworkInfo{}, nil
 }
 
 // setupTestServer creates a test server with a temporary database
@@ -687,4 +723,79 @@ func TestInspectImage(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestListPods(t *testing.T) {
+	srv, mock, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// Mock Podman returning status
+	mock.ListPodsFunc = func(ctx context.Context) ([]container.PodInfo, error) {
+		return []container.PodInfo{
+			{Name: "pod-running", Status: "Running", ID: "p1"},
+			{Name: "pod-created", Status: "Created", ID: "p2"},
+		}, nil
+	}
+
+	// Create pods in DB
+	err := srv.store.CreatePod(&core.Pod{Name: "pod-running", ID: "id-1", Status: "stopped"}) // DB says stopped
+	require.NoError(t, err)
+	err = srv.store.CreatePod(&core.Pod{Name: "pod-created", ID: "id-2", Status: "stopped"}) // DB says stopped
+	require.NoError(t, err)
+	err = srv.store.CreatePod(&core.Pod{Name: "pod-missing", ID: "id-3", Status: "stopped"}) // Not in engine
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/pods", http.NoBody)
+	w := httptest.NewRecorder()
+	srv.Router().ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var pods []core.Pod
+	err = json.Unmarshal(w.Body.Bytes(), &pods)
+	require.NoError(t, err)
+
+	// Verify status sync
+	podMap := make(map[string]core.Pod)
+	for _, p := range pods {
+		podMap[p.Name] = p
+	}
+
+	assert.Equal(t, "Running", podMap["pod-running"].Status)
+	assert.Equal(t, "Created", podMap["pod-created"].Status)
+	assert.Equal(t, "stopped", podMap["pod-missing"].Status)
+}
+
+func TestGetPod(t *testing.T) {
+	srv, mock, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// Mock InspectPod
+	mock.InspectPodFunc = func(ctx context.Context, nameOrID string) (*container.PodInfo, error) {
+		if nameOrID == "my-pod" {
+			return &container.PodInfo{ID: "p1", Name: "my-pod", Status: "Running"}, nil
+		}
+		return nil, errors.NewNotFoundError("pod", nameOrID)
+	}
+
+	// Create pod in DB
+	err := srv.store.CreatePod(&core.Pod{Name: "my-pod", ID: "pod-1", Status: "stopped"})
+	require.NoError(t, err)
+
+	// Test found
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/pods/pod-1", http.NoBody)
+	w := httptest.NewRecorder()
+	srv.Router().ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var pod core.Pod
+	err = json.Unmarshal(w.Body.Bytes(), &pod)
+	require.NoError(t, err)
+	assert.Equal(t, "Running", pod.Status)
+
+	// Test not found
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/pods/missing", http.NoBody)
+	w = httptest.NewRecorder()
+	srv.Router().ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }

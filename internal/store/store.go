@@ -16,6 +16,8 @@ const (
 	BucketProjects     = "projects"
 	BucketEnvironments = "environments"
 	BucketApplications = "applications"
+	BucketPods         = "pods"
+	BucketNetworks     = "networks"
 )
 
 // Store holds the database connection
@@ -59,6 +61,8 @@ func (s *Store) initBuckets() error {
 			BucketProjects,
 			BucketEnvironments,
 			BucketApplications,
+			BucketPods,
+			BucketNetworks,
 		}
 
 		for _, bucket := range buckets {
