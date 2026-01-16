@@ -27,7 +27,7 @@ type MockContainerManager struct {
 	InspectPodFunc   func(ctx context.Context, nameOrID string) (*container.PodInfo, error)
 }
 
-func (m *MockContainerManager) Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string, labels map[string]string, podName string) (string, error) {
+func (m *MockContainerManager) Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string, labels map[string]string, podName string, networkName string) (string, error) {
 	return "mock-id", nil
 }
 func (m *MockContainerManager) Stop(ctx context.Context, name string, timeout *uint) error {

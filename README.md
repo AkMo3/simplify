@@ -9,10 +9,12 @@ containerized applications across distributed infrastructure.
 
 ## About
 
-Simplify aims to be a modern alternative to platforms like Coolify, with key differentiators:
+Simplify aims to be a modern alternative to platforms like Coolify, Dokploy, with key differentiators:
 
-- **Native A/B and Canary Deployments** — Built-in support for advanced deployment
-  strategies without external tooling
+- **Native Pod & Namespace Support** — Simplify uses Pods (via Podman) as the fundamental unit,
+  enabling shared localhost networking between containers and cleaner isolation
+- **Native A/B and Canary Deployments** — Built-in support for advanced deployment strategies
+  without external tooling
 - **VPN-Based Multi-Server Coordination** — Secure communication between nodes using
   WireGuard mesh
 - **Security-First Architecture** — Only port 443 exposed by default, with network
@@ -29,10 +31,13 @@ Simplify aims to be a modern alternative to platforms like Coolify, with key dif
 - Port mapping and environment variable support
 - Structured logging with Zap
 - Configuration management with Viper
+- HTTP API Server & BoltDB persistence
+- Web Dashboard (Vite + React + Tailwind)
+- Pod management
+- Custom Network management
 
 ### 🚧 Planned
 
-- Stage 2: HTTP API Server & BoltDB persistence
 - Stage 3: Raft consensus integration
 - Stage 4: Multi-node clustering & WireGuard VPN
 - Stage 5: Traefik reverse proxy & TLS
@@ -75,6 +80,17 @@ make build
 # Remove a container
 ./bin/simplify rm web
 ./bin/simplify rm --force web
+
+# Pod Management
+./bin/simplify pod create --name web-pod --port 8080:80
+./bin/simplify pod list
+./bin/simplify pod inspect web-pod
+./bin/simplify pod rm web-pod
+
+# Network Management
+./bin/simplify network create my-net
+./bin/simplify network list
+./bin/simplify network rm my-net
 ```
 
 ## Configuration
@@ -109,6 +125,12 @@ golangci-lint run
 
 # Generate coverage report
 make test-coverage
+
+# Run with hot reload (backend)
+make dev
+
+# Run web dashboard
+cd web && bun run dev
 ```
 
 ## License
