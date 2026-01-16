@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/AkMo3/simplify/internal/logger"
@@ -475,12 +476,17 @@ func getIPAddress(networks map[string]*define.InspectAdditionalNetwork) string {
 // getSocketPath returns the Podman socket path based on environment
 func getSocketPath() string {
 	// Check CONTAINER_HOST first (used by podman-remote and systemd services)
+	// Format should be: unix:///path/to/socket
 	if sock := os.Getenv("CONTAINER_HOST"); sock != "" {
 		return sock
 	}
 
 	// Check PODMAN_SOCK for backwards compatibility
+	// Can be either /path/to/socket or unix:///path/to/socket
 	if sock := os.Getenv("PODMAN_SOCK"); sock != "" {
+		if strings.HasPrefix(sock, "unix://") {
+			return sock
+		}
 		return "unix://" + sock
 	}
 
