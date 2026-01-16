@@ -650,24 +650,18 @@ func (c *Client) InspectPod(ctx context.Context, nameOrID string) (*PodInfo, err
 }
 
 // CreateNetwork creates a new bridge network
-func (c *Client) CreateNetwork(ctx context.Context, name string) (string, error) {
-	logger.DebugCtx(ctx, "Creating network", "name", name)
+func (c *Client) CreateNetwork(ctx context.Context, name string, opts NetworkOptions) (string, error) {
+	logger.DebugCtx(ctx, "Creating network", "name", name, "mtu", opts.MTU)
 
-	// In this version of bindings, it seems we pass the Network struct directly?
-	// Based on error: want (context.Context, *"go.podman.io/common/libnetwork/types".Network)
 	net := &nettypes.Network{
-		Name:   name,
-		Driver: "bridge",
+		Name:    name,
+		Driver:  "bridge",
+		Options: make(map[string]string),
 	}
 
-	// Assuming network.Create returns (*types.NetworkCreateReport, error) or similar
-	// Let's try matching the signature "want (context.Context, *types.Network)"
-	// Wait, network.Create in bindings v5 usually takes (*types.Network, *network.CreateOptions) or similar?
-	// The error says it WANTS (ctx, *Network).
-	// Let's try just passing the network struct.
-
-	// Note: We might need to check if response is just the network struct back or a report.
-	// If it returns (newNet, err), then we use newNet.ID.
+	if opts.MTU > 0 {
+		net.Options["mtu"] = fmt.Sprintf("%d", opts.MTU)
+	}
 
 	newNet, err := network.Create(c.ctx, net)
 	if err != nil {

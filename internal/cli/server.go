@@ -149,6 +149,7 @@ func ensureProxyNetwork(ctx context.Context, client container.ContainerManager, 
 	}
 
 	logger.Info("Creating proxy network", "network", networkName)
-	_, err = client.CreateNetwork(ctx, networkName)
+	// Use MTU 1350 to be safe for cloud networks (like user's ens3)
+	_, err = client.CreateNetwork(ctx, networkName, container.NetworkOptions{MTU: 1350})
 	return err
 }
