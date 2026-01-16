@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+#
+# Simplify Install Script
+# Usage: curl -fsSL https://raw.githubusercontent.com/AkMo3/simplify/main/scripts/install.sh | bash
+#
+
+set -euo pipefail
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Configuration
+INSTALL_DIR="/usr/local/bin"
+DATA_DIR="/var/lib/simplify"
+CONFIG_DIR="/etc/simplify"
+SERVICE_USER="simplify"
+REPO="AkMo3/simplify"
+
+# Detect architecture
+ARCH=$(uname -m)
+case $ARCH in
+    x86_64) ARCH="amd64" ;;
+    aarch64|arm64) ARCH="arm64" ;;
+    *) log_error "Unsupported architecture: $ARCH"; exit 1 ;;
+esac
+
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+if [[ "$OS" != "linux" ]]; then
+    log_error "This script only supports Linux. For macOS, use: brew install simplify"
+    exit 1
+fi
+
+# Check for Podman
+check_podman() {
+    if ! command -v podman &> /dev/null; then
+        log_error "Podman is not installed. Please install Podman first:"
+        echo "  - Ubuntu/Debian: sudo apt install podman"
+        echo "  - Fedora: sudo dnf install podman"
+        echo "  - RHEL/CentOS: sudo yum install podman"
+        echo "  - See: https://podman.io/getting-started/installation"
+        exit 1
+    fi
+    log_info "Podman found: $(podman --version)"
+}
+
+# Download latest release
+download_binary() {
+    log_info "Downloading Simplify for $OS-$ARCH..."
+    
+    # Get latest release URL
+    LATEST_URL="https://github.com/$REPO/releases/latest/download/simplify-$OS-$ARCH"
+    
+    # Download to temp location
+    TMP_FILE=$(mktemp)
+    if ! curl -fsSL "$LATEST_URL" -o "$TMP_FILE"; then
+        log_error "Failed to download binary from $LATEST_URL"
+        exit 1
+    fi
+    
+    chmod +x "$TMP_FILE"
+    
+    # Install
+    log_info "Installing to $INSTALL_DIR/simplify..."
+    sudo mv "$TMP_FILE" "$INSTALL_DIR/simplify"
+}
+
+# Create directories and config
+setup_dirs() {
+    log_info "Creating directories..."
+    sudo mkdir -p "$DATA_DIR"
+    sudo mkdir -p "$CONFIG_DIR"
+    
+    # Create default config if not exists
+    if [[ ! -f "$CONFIG_DIR/config.yaml" ]]; then
+        sudo tee "$CONFIG_DIR/config.yaml" > /dev/null <<EOF
+env: production
+
+server:
+  port: 8080
+
+database:
+  path: $DATA_DIR/data.db
+
+caddy:
+  enabled: true
+  data_dir: $DATA_DIR
+  http_port: 80
+  https_port: 443
+EOF
+        log_info "Created default config at $CONFIG_DIR/config.yaml"
+    fi
+}
+
+# Create systemd service
+install_service() {
+    log_info "Creating systemd service..."
+    
+    # Create service user if not exists
+    if ! id "$SERVICE_USER" &>/dev/null; then
+        sudo useradd -r -s /bin/false "$SERVICE_USER"
+        log_info "Created service user: $SERVICE_USER"
+    fi
+    
+    # Set permissions
+    sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$DATA_DIR"
+    
+    # Add user to podman group if exists
+    if getent group podman &>/dev/null; then
+        sudo usermod -aG podman "$SERVICE_USER"
+    fi
+    
+    # Create systemd service
+    sudo tee /etc/systemd/system/simplify.service > /dev/null <<EOF
+[Unit]
+Description=Simplify Container Orchestrator
+After=network.target
+
+[Service]
+Type=simple
+User=$SERVICE_USER
+ExecStart=$INSTALL_DIR/simplify server --config $CONFIG_DIR/config.yaml
+Restart=always
+RestartSec=5
+Environment=XDG_RUNTIME_DIR=/run/user/\$(id -u $SERVICE_USER)
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    sudo systemctl daemon-reload
+    log_info "Systemd service created"
+}
+
+# Main installation
+main() {
+    echo ""
+    echo "================================"
+    echo "  Simplify Installer"
+    echo "================================"
+    echo ""
+    
+    check_podman
+    download_binary
+    setup_dirs
+    install_service
+    
+    echo ""
+    log_info "Installation complete!"
+    echo ""
+    echo "To start Simplify:"
+    echo "  sudo systemctl enable --now simplify"
+    echo ""
+    echo "Or run manually:"
+    echo "  simplify server"
+    echo ""
+    echo "Access the web UI at: http://localhost"
+    echo ""
+}
+
+main "$@"

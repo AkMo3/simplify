@@ -26,6 +26,21 @@ run: build
 run-server: build
 	./bin/$(BINARY_NAME) server
 
+# Frontend targets
+.PHONY: build-frontend build-frontend-prod
+
+# Build frontend for development
+build-frontend:
+	cd web && npm install && npm run build
+
+# Build frontend for production (clean install)
+build-frontend-prod:
+	cd web && npm ci && npm run build
+
+# Build everything for production
+build-all: build-frontend-prod build-release
+	@echo "Built frontend and backend for production"
+
 # Run with hot reload (requires air)
 dev:
 	air -c air.toml

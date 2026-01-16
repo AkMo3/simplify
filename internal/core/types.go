@@ -44,9 +44,12 @@ type Application struct {
 	PodID             string            `json:"pod_id,omitempty"`
 	NetworkID         string            `json:"network_id,omitempty"`
 	IPAddress         string            `json:"ip_address,omitempty"`
+	ProxyHostname     string            `json:"proxy_hostname,omitempty"` // e.g., "myapp.example.com"
 	ConnectedNetworks []string          `json:"connected_networks,omitempty"`
 	ExposedPorts      []string          `json:"exposed_ports,omitempty"`
+	ProxyPort         int               `json:"proxy_port,omitempty"` // Container port to proxy (e.g., 8080)
 	Replicas          int               `json:"replicas"`
+	ProxyEnabled      bool              `json:"proxy_enabled,omitempty"` // Enable reverse proxy for this app
 }
 
 // Pod represents a shared network namespace for multiple applications

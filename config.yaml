@@ -15,3 +15,15 @@ server:
 # Using a local path for development convenience
 database:
   path: "./simplify-dev.db"
+
+# Caddy reverse proxy configuration
+caddy:
+  enabled: false                    # Set to true to enable Caddy management
+  image: "docker.io/library/caddy:alpine"
+  data_dir: "/var/lib/simplify"     # Directory for Caddyfile and Caddy data
+  frontend_path: "./web/dist"       # Path to built frontend (run 'make build-frontend' first)
+  proxy_network: "simplify-proxy"   # Network for proxied containers
+  admin_port: 2019                  # Caddy admin API (bound to 127.0.0.1)
+  http_port: 80                     # HTTP port (bound to 0.0.0.0)
+  https_port: 443                   # HTTPS port (bound to 0.0.0.0)
+

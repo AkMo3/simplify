@@ -19,8 +19,21 @@ const (
 	DefaultDatabasePath = "/var/lib/simplify/data.db"
 )
 
+// CaddyConfig holds Caddy reverse proxy configuration
+type CaddyConfig struct {
+	Enabled      bool   `mapstructure:"enabled"`       // Enable Caddy management
+	Image        string `mapstructure:"image"`         // Container image (default: caddy:alpine)
+	DataDir      string `mapstructure:"data_dir"`      // Data directory for Caddy files
+	FrontendPath string `mapstructure:"frontend_path"` // Path to built frontend (web/dist)
+	ProxyNetwork string `mapstructure:"proxy_network"` // Network name for proxying
+	AdminPort    int    `mapstructure:"admin_port"`    // Admin API port (default: 2019)
+	HTTPPort     int    `mapstructure:"http_port"`     // HTTP port (default: 80)
+	HTTPSPort    int    `mapstructure:"https_port"`    // HTTPS port (default: 443)
+}
+
 // Config is the root configuration structure
 type Config struct {
+	Caddy    CaddyConfig    `mapstructure:"caddy"`
 	Database DatabaseConfig `mapstructure:"database"`
 	Env      string         `mapstructure:"env"`
 	Server   ServerConfig   `mapstructure:"server"`
@@ -117,6 +130,16 @@ func setDefaults() {
 
 	// Database defaults
 	viper.SetDefault("database.path", DefaultDatabasePath)
+
+	// Caddy defaults
+	viper.SetDefault("caddy.enabled", false)
+	viper.SetDefault("caddy.image", "docker.io/library/caddy:alpine")
+	viper.SetDefault("caddy.data_dir", "/var/lib/simplify")
+	viper.SetDefault("caddy.frontend_path", "") // Empty = use data_dir/www
+	viper.SetDefault("caddy.proxy_network", "simplify-proxy")
+	viper.SetDefault("caddy.admin_port", 2019)
+	viper.SetDefault("caddy.http_port", 80)
+	viper.SetDefault("caddy.https_port", 443)
 }
 
 // validateConfig validates the loaded configuration
@@ -170,6 +193,15 @@ func Get() *Config {
 			},
 			Database: DatabaseConfig{
 				Path: DefaultDatabasePath,
+			},
+			Caddy: CaddyConfig{
+				Enabled:      false,
+				Image:        "docker.io/library/caddy:alpine",
+				DataDir:      "/var/lib/simplify",
+				ProxyNetwork: "simplify-proxy",
+				AdminPort:    2019,
+				HTTPPort:     80,
+				HTTPSPort:    443,
 			},
 		}
 	}

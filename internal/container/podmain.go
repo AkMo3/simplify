@@ -144,6 +144,102 @@ func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]u
 	return createResponse.ID, nil
 }
 
+// RunWithMounts creates and starts a container with volume mounts
+func (c *Client) RunWithMounts(ctx context.Context, opts RunOptions) (string, error) {
+	logger.DebugCtx(ctx, "Checking if image exists", "image", opts.Image)
+
+	// Pull image if not exists
+	exists, err := images.Exists(c.ctx, opts.Image, nil)
+	if err != nil {
+		return "", fmt.Errorf("checking image: %w", err)
+	}
+
+	if !exists {
+		logger.InfoCtx(ctx, "Pulling image", "image", opts.Image)
+		_, err = images.Pull(c.ctx, opts.Image, nil)
+		if err != nil {
+			return "", fmt.Errorf("pulling image: %w", err)
+		}
+		logger.DebugCtx(ctx, "Image pulled successfully", "image", opts.Image)
+	}
+
+	// Create spec
+	s := specgen.NewSpecGenerator(opts.Image, false)
+	s.Name = opts.Name
+	s.Env = envSliceToMap(opts.Env)
+	s.Labels = opts.Labels
+
+	// Handle pod or ports
+	switch {
+	case opts.PodName != "":
+		s.Pod = opts.PodName
+		if len(opts.Ports) > 0 {
+			logger.DebugCtx(ctx, "Ignoring container ports because running in a Pod", "pod", opts.PodName)
+		}
+	case len(opts.Ports) > 0:
+		s.PortMappings = make([]nettypes.PortMapping, 0, len(opts.Ports))
+		for hostPort, containerPort := range opts.Ports {
+			logger.DebugCtx(ctx, "Adding port mapping",
+				"host_port", hostPort,
+				"container_port", containerPort,
+			)
+			s.PortMappings = append(s.PortMappings, nettypes.PortMapping{
+				HostIP:        "0.0.0.0", // Caddy needs external access
+				HostPort:      hostPort,
+				ContainerPort: containerPort,
+				Protocol:      "tcp",
+			})
+		}
+	}
+
+	// Handle network
+	if opts.NetworkName != "" {
+		logger.DebugCtx(ctx, "Setting network", "network", opts.NetworkName)
+		s.CNINetworks = []string{opts.NetworkName}
+	}
+
+	// Handle mounts using Volumes (bind mounts)
+	if len(opts.Mounts) > 0 {
+		for _, m := range opts.Mounts {
+			logger.DebugCtx(ctx, "Adding bind mount",
+				"source", m.Source,
+				"target", m.Target,
+				"readonly", m.ReadOnly,
+			)
+			// Use Volumes for bind mounts in the format source:dest[:options]
+			mountStr := m.Source + ":" + m.Target
+			if m.ReadOnly {
+				mountStr += ":ro"
+			}
+			s.Volumes = append(s.Volumes, &specgen.NamedVolume{
+				Name: m.Source,
+				Dest: m.Target,
+			})
+		}
+	}
+
+	// Create container
+	logger.DebugCtx(ctx, "Creating container", "name", opts.Name)
+	createResponse, err := containers.CreateWithSpec(c.ctx, s, nil)
+	if err != nil {
+		return "", fmt.Errorf("creating container: %w", err)
+	}
+
+	// Start container
+	logger.DebugCtx(ctx, "Starting container", "id", createResponse.ID[:12])
+	if err := containers.Start(c.ctx, createResponse.ID, nil); err != nil {
+		return "", fmt.Errorf("starting container: %w", err)
+	}
+
+	logger.InfoCtx(ctx, "Container running",
+		"name", opts.Name,
+		"id", createResponse.ID[:12],
+		"mounts", len(opts.Mounts),
+	)
+
+	return createResponse.ID, nil
+}
+
 // Stop stops a running container
 func (c *Client) Stop(ctx context.Context, name string, timeout *uint) error {
 	logger.DebugCtx(ctx, "Stopping container", "name", name)
@@ -620,4 +716,28 @@ func getNetworkNames(networks map[string]*define.InspectAdditionalNetwork) []str
 		result = append(result, k)
 	}
 	return result
+}
+
+// ConnectNetwork connects a container to a network
+func (c *Client) ConnectNetwork(ctx context.Context, containerName, networkName string) error {
+	logger.DebugCtx(ctx, "Connecting container to network", "container", containerName, "network", networkName)
+
+	if err := network.Connect(c.ctx, networkName, containerName, nil); err != nil {
+		return fmt.Errorf("connecting container %s to network %s: %w", containerName, networkName, err)
+	}
+
+	logger.InfoCtx(ctx, "Container connected to network", "container", containerName, "network", networkName)
+	return nil
+}
+
+// DisconnectNetwork disconnects a container from a network
+func (c *Client) DisconnectNetwork(ctx context.Context, containerName, networkName string) error {
+	logger.DebugCtx(ctx, "Disconnecting container from network", "container", containerName, "network", networkName)
+
+	if err := network.Disconnect(c.ctx, networkName, containerName, nil); err != nil {
+		return fmt.Errorf("disconnecting container %s from network %s: %w", containerName, networkName, err)
+	}
+
+	logger.InfoCtx(ctx, "Container disconnected from network", "container", containerName, "network", networkName)
+	return nil
 }

@@ -88,6 +88,15 @@ func (m *MockContainerManager) RemoveNetwork(ctx context.Context, nameOrID strin
 func (m *MockContainerManager) ListNetworks(ctx context.Context) ([]container.NetworkInfo, error) {
 	return []container.NetworkInfo{}, nil
 }
+func (m *MockContainerManager) ConnectNetwork(ctx context.Context, containerName, network string) error {
+	return nil
+}
+func (m *MockContainerManager) DisconnectNetwork(ctx context.Context, containerName, network string) error {
+	return nil
+}
+func (m *MockContainerManager) RunWithMounts(ctx context.Context, opts container.RunOptions) (string, error) {
+	return "mock-id", nil
+}
 
 // setupTestServer creates a test server with a temporary database
 func setupTestServer(t *testing.T) (srv *Server, mock *MockContainerManager, cleanup func()) {

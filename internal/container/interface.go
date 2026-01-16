@@ -9,6 +9,7 @@ import (
 // This interface is used for mocking in tests.
 type ContainerManager interface {
 	Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string, labels map[string]string, podName string, networkName string) (string, error)
+	RunWithMounts(ctx context.Context, opts RunOptions) (string, error)
 	Stop(ctx context.Context, name string, timeout *uint) error
 	Remove(ctx context.Context, name string, force bool) error
 	List(ctx context.Context, all bool) ([]ContainerInfo, error)
@@ -23,6 +24,27 @@ type ContainerManager interface {
 	CreateNetwork(ctx context.Context, name string) (string, error)
 	RemoveNetwork(ctx context.Context, nameOrID string) error
 	ListNetworks(ctx context.Context) ([]NetworkInfo, error)
+	ConnectNetwork(ctx context.Context, container, network string) error
+	DisconnectNetwork(ctx context.Context, container, network string) error
+}
+
+// Mount represents a volume mount for a container
+type Mount struct {
+	Source   string // Host path
+	Target   string // Container path
+	ReadOnly bool
+}
+
+// RunOptions contains all options for running a container
+type RunOptions struct {
+	Name        string
+	Image       string
+	Ports       map[uint16]uint16
+	Env         []string
+	Labels      map[string]string
+	PodName     string
+	NetworkName string
+	Mounts      []Mount
 }
 
 // ImageInfo holds image metadata

@@ -327,7 +327,28 @@ func (w *Worker) deployApp(ctx context.Context, app *core.Application, container
 
 	// Call Container Client
 	_, err = w.container.Run(ctx, containerName, app.Image, ports, env, labels, podName, networkName)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// If proxy is enabled, connect to proxy network
+	if app.ProxyEnabled && app.ProxyHostname != "" {
+		proxyNetwork := "simplify-proxy" // Could be made configurable
+		logger.InfoCtx(ctx, "Connecting app to proxy network",
+			"app", app.Name,
+			"network", proxyNetwork,
+			"hostname", app.ProxyHostname,
+		)
+		if err := w.container.ConnectNetwork(ctx, containerName, proxyNetwork); err != nil {
+			logger.WarnCtx(ctx, "Failed to connect app to proxy network",
+				"app", app.Name,
+				"error", err,
+			)
+			// Don't fail deployment, just log warning
+		}
+	}
+
+	return nil
 }
 
 // parsePorts converts "80:80" strings into uint16 map

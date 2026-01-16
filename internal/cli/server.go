@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/AkMo3/simplify/internal/caddy"
 	"github.com/AkMo3/simplify/internal/config"
 	"github.com/AkMo3/simplify/internal/container"
 	"github.com/AkMo3/simplify/internal/logger"
@@ -81,6 +82,33 @@ func runServer(cmd *cobra.Command, args []string) error {
 		cancel()
 	}()
 
+	// Initialize Caddy manager if enabled
+	var caddyMgr *caddy.Manager
+	if cfg.Caddy.Enabled {
+		logger.Info("Caddy integration enabled, initializing...")
+
+		// Ensure proxy network exists
+		if err := ensureProxyNetwork(ctx, podman, cfg.Caddy.ProxyNetwork); err != nil {
+			logger.Error("Failed to create proxy network", "error", err)
+			return err
+		}
+
+		// Create and start Caddy manager
+		caddyMgr = caddy.New(podman, &cfg.Caddy, cfg.Server.Port)
+		if err := caddyMgr.EnsureRunning(ctx); err != nil {
+			logger.Error("Failed to start Caddy", "error", err)
+			return err
+		}
+		logger.Info("Caddy container started")
+
+		// Defer Caddy cleanup
+		defer func() {
+			if err := caddyMgr.Stop(context.Background()); err != nil {
+				logger.Error("Failed to stop Caddy", "error", err)
+			}
+		}()
+	}
+
 	// Start reconciler in background
 	worker := reconciler.New(s, podman)
 	go worker.Start(ctx)
@@ -104,4 +132,23 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	logger.Info("Simplify server stopped")
 	return nil
+}
+
+// ensureProxyNetwork creates the proxy network if it doesn't exist
+func ensureProxyNetwork(ctx context.Context, client container.ContainerManager, networkName string) error {
+	networks, err := client.ListNetworks(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, n := range networks {
+		if n.Name == networkName {
+			logger.DebugCtx(ctx, "Proxy network already exists", "network", networkName)
+			return nil
+		}
+	}
+
+	logger.Info("Creating proxy network", "network", networkName)
+	_, err = client.CreateNetwork(ctx, networkName)
+	return err
 }
