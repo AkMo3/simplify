@@ -27,7 +27,7 @@ type MockContainerManager struct {
 	InspectPodFunc   func(ctx context.Context, nameOrID string) (*container.PodInfo, error)
 }
 
-func (m *MockContainerManager) Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string, labels map[string]string, podName string, networkName string) (string, error) {
+func (m *MockContainerManager) Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string, labels map[string]string, podName, networkName string) (string, error) {
 	return "mock-id", nil
 }
 func (m *MockContainerManager) Stop(ctx context.Context, name string, timeout *uint) error {
@@ -139,10 +139,10 @@ func TestCreateApplication(t *testing.T) {
 	defer cleanup()
 
 	tests := []struct {
-		name           string
 		body           map[string]any
-		expectedStatus int
 		checkResponse  func(t *testing.T, body []byte)
+		name           string
+		expectedStatus int
 	}{
 		{
 			name: "valid application",
@@ -529,10 +529,10 @@ func TestNoCacheHeaders(t *testing.T) {
 
 func TestMapErrorToResponse(t *testing.T) {
 	tests := []struct {
-		name           string
 		err            error
-		expectedStatus int
+		name           string
 		expectedCode   string
+		expectedStatus int
 	}{
 		{
 			name:           "not found error",
@@ -663,10 +663,10 @@ func TestInspectImage(t *testing.T) {
 	defer cleanup()
 
 	tests := []struct {
+		mockSetup      func()
 		name           string
 		image          string
 		expectedStatus int
-		mockSetup      func()
 	}{
 		{
 			name:           "valid image",

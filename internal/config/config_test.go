@@ -354,10 +354,10 @@ func TestLoad_EmptyConfig(t *testing.T) {
 // TestValidateConfig tests the validation function directly
 func TestValidateConfig(t *testing.T) {
 	tests := []struct {
-		name        string
 		cfg         *Config
-		expectError bool
+		name        string
 		errorMsg    string
+		expectError bool
 	}{
 		{
 			name: "valid config",

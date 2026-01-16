@@ -33,19 +33,19 @@ type ImageInfo struct {
 
 // PodInfo holds pod metadata from the container engine
 type PodInfo struct {
+	Created time.Time
 	ID      string
 	Name    string
 	Status  string
-	Created time.Time
 }
 
 // NetworkInfo holds network metadata from the container engine
 type NetworkInfo struct {
+	Created time.Time
 	ID      string
 	Name    string
 	Driver  string
 	Subnet  string
-	Created time.Time
 }
 
 // Ensure Client implements ContainerManager

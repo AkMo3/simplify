@@ -117,7 +117,8 @@ func (w *Worker) reconcileApps(ctx context.Context) error {
 	// Map ContainerName -> bool for orphan tracking
 	managedContainers := make(map[string]bool)
 
-	for _, c := range containers {
+	for i := range containers {
+		c := &containers[i]
 		// Check for managed label
 		isManaged := false
 		appID := ""
@@ -133,7 +134,7 @@ func (w *Worker) reconcileApps(ctx context.Context) error {
 
 		if isManaged {
 			if appID != "" {
-				existingApps[appID] = c
+				existingApps[appID] = *c
 			}
 			managedContainers[c.Name] = true
 		}
@@ -158,9 +159,10 @@ func (w *Worker) reconcileApps(ctx context.Context) error {
 
 			// Check if we need to recreate
 			needsRecreate := false
-			if info.Status != "running" && !strings.HasPrefix(info.Status, "Up") {
+			switch {
+			case info.Status != "running" && !strings.HasPrefix(info.Status, "Up"):
 				needsRecreate = true
-			} else if app.PodID != "" {
+			case app.PodID != "":
 				// App should be in a Pod.
 				// app.PodID is the DB ID. We need to check if the container is in the CORRECT physical pod.
 				// Podman container info gives us the PHYSICAL Pod ID.
@@ -191,25 +193,27 @@ func (w *Worker) reconcileApps(ctx context.Context) error {
 						// We have physical ID. Compare with info.PodID.
 						// Note: IDs might be short (12 chars) or full (64 chars). compare prefix.
 						match := false
-						if info.PodID == physicalPod.ID {
+						switch {
+						case info.PodID == physicalPod.ID:
 							match = true
-						} else if len(info.PodID) > len(physicalPod.ID) && strings.HasPrefix(info.PodID, physicalPod.ID) {
+						case len(info.PodID) > len(physicalPod.ID) && strings.HasPrefix(info.PodID, physicalPod.ID):
 							match = true
-						} else if len(physicalPod.ID) > len(info.PodID) && strings.HasPrefix(physicalPod.ID, info.PodID) {
+						case len(physicalPod.ID) > len(info.PodID) && strings.HasPrefix(physicalPod.ID, info.PodID):
 							match = true
 						}
 
 						if !match {
 							needsRecreate = true
 							logger.Info("Pod mismatch", "app", app.Name, "expected_pod_name", pod.Name, "expected_pod_id", physicalPod.ID, "actual_pod_id", info.PodID)
+
 						}
 					}
 				}
-			} else if app.PodID == "" && info.PodID != "" {
+			case app.PodID == "" && info.PodID != "":
 				// App should NOT be in a Pod, but IS
 				needsRecreate = true
 				logger.Info("Pod mismatch (should be standalone)", "app", app.Name, "actual_pod", info.PodID)
-			} else if app.NetworkID != "" {
+			case app.NetworkID != "":
 				// App should be in a Network
 				// We need to look up network name from DB ID to check against info.Networks names
 				// This requires unnecessary DB lookup inside the loop?
@@ -233,7 +237,7 @@ func (w *Worker) reconcileApps(ctx context.Context) error {
 					needsRecreate = true
 					logger.Info("Ports mismatch", "app", app.Name, "info_ports", info.Ports)
 				}
-			} else if app.PodID == "" && !checkPortsMatch(app.Ports, info.Ports) {
+			case app.PodID == "" && !checkPortsMatch(app.Ports, info.Ports):
 				// Standalone default bridge
 				needsRecreate = true
 				logger.Info("Ports mismatch", "app", app.Name, "info_ports", info.Ports)

@@ -10,9 +10,9 @@ import (
 // TestEnvSliceToMap tests the envionment variable parsing
 func TestEnvSliceToMap(t *testing.T) {
 	tests := []struct {
+		expected map[string]string
 		name     string
 		input    []string
-		expected map[string]string
 	}{
 		{
 			name:     "empty slice",
@@ -76,9 +76,9 @@ func TestEnvSliceToMap(t *testing.T) {
 // TestFormatPorts tests the port formatting for display
 func TestFormatPorts(t *testing.T) {
 	tests := []struct {
+		expected map[string]string
 		name     string
 		input    []nettypes.PortMapping
-		expected map[string]string
 	}{
 		{
 			name:     "empty ports",

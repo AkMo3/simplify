@@ -54,7 +54,8 @@ func listContainers(cmd *cobra.Command, args []string) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tNAME\tIMAGE\tSTATUS\tPORTS\tCREATED")
 
-	for _, c := range containers {
+	for i := range containers {
+		c := &containers[i]
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 			c.ID,
 			c.Name,

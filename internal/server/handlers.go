@@ -13,6 +13,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const statusStopped = "stopped"
+
 // =============================================================================
 // Application Handlers
 // =============================================================================
@@ -66,7 +68,8 @@ func (s *Server) handleListApplications(w http.ResponseWriter, r *http.Request) 
 
 	// Create a map of AppID -> ContainerInfo
 	containerMap := make(map[string]container.ContainerInfo)
-	for _, c := range containers {
+	for i := range containers {
+		c := containers[i]
 		if appID, ok := c.Labels["simplify.app.id"]; ok {
 			containerMap[appID] = c
 		}
@@ -80,7 +83,7 @@ func (s *Server) handleListApplications(w http.ResponseWriter, r *http.Request) 
 			apps[i].ExposedPorts = info.ExposedPorts
 			apps[i].ConnectedNetworks = info.Networks
 		} else {
-			apps[i].Status = "stopped" // Or "unknown" or empty
+			apps[i].Status = statusStopped // Or "unknown" or empty
 		}
 	}
 
@@ -110,7 +113,7 @@ func (s *Server) handleGetApplication(w http.ResponseWriter, r *http.Request) er
 		// Log error but return DB state (likely stopped or previous state)
 		logger.ErrorCtx(r.Context(), "Error inspecting container", "id", app.ID, "error", err)
 		if app.Status == "" {
-			app.Status = "stopped"
+			app.Status = statusStopped
 		}
 	} else {
 		app.Status = info.Status
@@ -510,10 +513,8 @@ func (s *Server) handleListPods(w http.ResponseWriter, r *http.Request) error {
 		for i := range pods {
 			if status, ok := statusMap[pods[i].Name]; ok {
 				pods[i].Status = status
-			} else {
-				// If not found in engine, it might be stopped/removed or pending creation
 				if pods[i].Status == "" {
-					pods[i].Status = "stopped"
+					pods[i].Status = statusStopped
 				}
 			}
 		}
@@ -540,7 +541,7 @@ func (s *Server) handleGetPod(w http.ResponseWriter, r *http.Request) error {
 		// Log error but return DB state (likely stopped or previous state)
 		logger.ErrorCtx(r.Context(), "Error inspecting pod", "name", pod.Name, "error", err)
 		if pod.Status == "" {
-			pod.Status = "stopped"
+			pod.Status = statusStopped
 		}
 	} else {
 		pod.Status = info.Status

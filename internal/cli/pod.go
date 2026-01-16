@@ -59,7 +59,7 @@ func init() {
 	// Create flags
 	podCreateCmd.Flags().StringVarP(&podName, "name", "n", "", "Pod name (required)")
 	podCreateCmd.Flags().StringSliceVarP(&podPorts, "port", "p", []string{}, "Port mappings (host:container)")
-	_ = podCreateCmd.MarkFlagRequired("name")
+	_ = podCreateCmd.MarkFlagRequired("name") //nolint:errcheck // flag registration rarely fails
 
 	// Rm flags
 	podRmCmd.Flags().BoolVarP(&podForce, "force", "f", false, "Force removal")

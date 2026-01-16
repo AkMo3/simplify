@@ -59,7 +59,7 @@ func (c *Client) Context() context.Context {
 }
 
 // Run creates and starts a container
-func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string, labels map[string]string, podName string, networkName string) (string, error) {
+func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string, labels map[string]string, podName, networkName string) (string, error) {
 	logger.DebugCtx(ctx, "Checking if image exists", "image", image)
 
 	// Pull image if not exists
@@ -83,7 +83,8 @@ func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]u
 	s.Env = envSliceToMap(env)
 	s.Labels = labels
 
-	if podName != "" {
+	switch {
+	case podName != "":
 		s.Pod = podName
 		// When in a pod, ports are ignored here (handled by pod) typically,
 		// but if we want to expose ports from the container specifically (uncommon in shared net),
@@ -99,7 +100,7 @@ func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]u
 		if len(ports) > 0 {
 			logger.DebugCtx(ctx, "Ignoring container ports because running in a Pod", "pod", podName)
 		}
-	} else if len(ports) > 0 {
+	case len(ports) > 0:
 		s.PortMappings = make([]nettypes.PortMapping, 0, len(ports))
 		for hostPort, containerPort := range ports {
 			logger.DebugCtx(ctx, "Adding port mapping",
@@ -113,21 +114,7 @@ func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]u
 				Protocol:      "tcp",
 			})
 		}
-	} else if len(ports) > 0 {
-		s.PortMappings = make([]nettypes.PortMapping, 0, len(ports))
-		for hostPort, containerPort := range ports {
-			logger.DebugCtx(ctx, "Adding port mapping",
-				"host_port", hostPort,
-				"container_port", containerPort,
-			)
-			s.PortMappings = append(s.PortMappings, nettypes.PortMapping{
-				HostIP:        "127.0.0.1",
-				HostPort:      hostPort,
-				ContainerPort: containerPort,
-				Protocol:      "tcp",
-			})
-		}
-	} else {
+	default:
 		logger.DebugCtx(ctx, "No port mappings provided")
 	}
 
@@ -597,7 +584,8 @@ func (c *Client) ListNetworks(ctx context.Context) ([]NetworkInfo, error) {
 	}
 
 	result := make([]NetworkInfo, 0, len(reports))
-	for _, n := range reports {
+	for i := range reports {
+		n := &reports[i]
 		// Filter out standard networks if we want to show only user-created?
 		// For now show all, maybe filter 'host', 'none' in UI
 		subnet := ""
