@@ -22,6 +22,10 @@ const (
 	caddyfileTemplate = `# Simplify Caddy Configuration
 # Auto-generated - do not edit manually
 
+{
+    admin :2019
+}
+
 {{if .SimplifyHost}}
 {{.SimplifyHost}} {
     # API routes
