@@ -266,6 +266,11 @@ func (w *Worker) reconcileApps(ctx context.Context) error {
 	// Cleanup Orphans
 	for name := range managedContainers {
 		if !desiredContainerNames[name] {
+			// Skip system containers (like Caddy)
+			if strings.HasPrefix(name, "simplify-") {
+				continue
+			}
+
 			logger.Info("Removing orphaned container", "container", name)
 			if err := w.container.Remove(ctx, name, true); err != nil {
 				logger.Error("Failed to remove orphan", "container", name, "error", err)
