@@ -55,20 +55,69 @@ download_binary() {
     log_info "Downloading Simplify for $OS-$ARCH..."
     
     # Get latest release URL
-    LATEST_URL="https://github.com/$REPO/releases/latest/download/simplify-$OS-$ARCH"
+    BASE_URL="https://github.com/$REPO/releases/latest/download"
+    BINARY_URL="$BASE_URL/simplify-$OS-$ARCH"
+    WEB_DIST_URL="$BASE_URL/web-dist.zip"
     
-    # Download to temp location
+    # Download binary
     TMP_FILE=$(mktemp)
-    if ! curl -fsSL "$LATEST_URL" -o "$TMP_FILE"; then
-        log_error "Failed to download binary from $LATEST_URL"
+    if ! curl -fsSL "$BINARY_URL" -o "$TMP_FILE"; then
+        log_error "Failed to download binary from $BINARY_URL"
         exit 1
     fi
     
     chmod +x "$TMP_FILE"
     
-    # Install
-    log_info "Installing to $INSTALL_DIR/simplify..."
+    # Install binary
+    log_info "Installing binary to $INSTALL_DIR/simplify..."
     sudo mv "$TMP_FILE" "$INSTALL_DIR/simplify"
+
+    # Download and install frontend
+    log_info "Downloading frontend assets..."
+    TMP_ZIP=$(mktemp)
+    if ! curl -fsSL "$WEB_DIST_URL" -o "$TMP_ZIP"; then
+        log_warn "Failed to download frontend assets from $WEB_DIST_URL"
+        log_warn "Web UI may not work correctly"
+    else
+        WEB_DIR="/opt/simplify/web"
+        log_info "Installing frontend to $WEB_DIR..."
+        
+        # Create web directory
+        sudo mkdir -p "$WEB_DIR"
+        
+        # Install unzip if needed
+        if ! command -v unzip &> /dev/null; then
+            log_warn "unzip command not found, attempting to install..."
+            if command -v apt-get &> /dev/null; then
+                sudo apt-get update && sudo apt-get install -y unzip
+            elif command -v dnf &> /dev/null; then
+                sudo dnf install -y unzip
+            elif command -v yum &> /dev/null; then
+                sudo yum install -y unzip
+            else
+                log_error "Could not install unzip. Please install unzip manually to deploy frontend."
+            fi
+        fi
+
+        if command -v unzip &> /dev/null; then
+            # Unzip to temp dir first
+            TMP_EXTRACT=$(mktemp -d)
+            unzip -q "$TMP_ZIP" -d "$TMP_EXTRACT"
+            
+            # Move dist folder to destination
+            if [ -d "$TMP_EXTRACT/dist" ]; then
+                sudo rm -rf "$WEB_DIR/dist"
+                sudo mv "$TMP_EXTRACT/dist" "$WEB_DIR/"
+                log_info "Frontend installed successfully"
+            else
+                log_warn "web-dist.zip did not contain 'dist' folder"
+            fi
+            
+            rm -rf "$TMP_EXTRACT"
+        fi
+        
+        rm -f "$TMP_ZIP"
+    fi
 }
 
 # Create directories and config
@@ -91,6 +140,8 @@ database:
 caddy:
   enabled: true
   data_dir: $DATA_DIR
+  frontend_path: /opt/simplify/web/dist
+  dashboard_domain: ""
   http_port: 80
   https_port: 443
 EOF

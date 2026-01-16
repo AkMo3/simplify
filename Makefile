@@ -53,9 +53,19 @@ build-frontend:
 build-frontend-prod:
 	cd web && npm ci && npm run build
 
+# Package frontend for release (creates web-dist.zip)
+package-frontend: build-frontend-prod
+	cd web && zip -r ../bin/web-dist.zip dist
+	@echo "Created bin/web-dist.zip"
+
 # Build everything for production
-build-all: build-frontend-prod build-release
-	@echo "Built frontend and backend for production"
+build-all: build-frontend-prod build-release package-frontend
+	@echo "Built frontend, backend, and packaged web-dist.zip"
+
+# Build all release artifacts (binaries + frontend zip)
+release: build-linux package-frontend
+	@echo "Release artifacts ready in bin/"
+	@ls -la bin/
 
 # Run with hot reload (requires air)
 dev:

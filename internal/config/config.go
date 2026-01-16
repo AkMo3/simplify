@@ -21,14 +21,15 @@ const (
 
 // CaddyConfig holds Caddy reverse proxy configuration
 type CaddyConfig struct {
-	Enabled      bool   `mapstructure:"enabled"`       // Enable Caddy management
-	Image        string `mapstructure:"image"`         // Container image (default: caddy:alpine)
-	DataDir      string `mapstructure:"data_dir"`      // Data directory for Caddy files
-	FrontendPath string `mapstructure:"frontend_path"` // Path to built frontend (web/dist)
-	ProxyNetwork string `mapstructure:"proxy_network"` // Network name for proxying
-	AdminPort    int    `mapstructure:"admin_port"`    // Admin API port (default: 2019)
-	HTTPPort     int    `mapstructure:"http_port"`     // HTTP port (default: 80)
-	HTTPSPort    int    `mapstructure:"https_port"`    // HTTPS port (default: 443)
+	Enabled         bool   `mapstructure:"enabled"`          // Enable Caddy management
+	Image           string `mapstructure:"image"`            // Container image (default: caddy:alpine)
+	DataDir         string `mapstructure:"data_dir"`         // Data directory for Caddy files
+	FrontendPath    string `mapstructure:"frontend_path"`    // Path to built frontend (web/dist)
+	DashboardDomain string `mapstructure:"dashboard_domain"` // Domain for the dashboard (e.g., "dashboard.example.com")
+	ProxyNetwork    string `mapstructure:"proxy_network"`    // Network name for proxying
+	AdminPort       int    `mapstructure:"admin_port"`       // Admin API port (default: 2019)
+	HTTPPort        int    `mapstructure:"http_port"`        // HTTP port (default: 80)
+	HTTPSPort       int    `mapstructure:"https_port"`       // HTTPS port (default: 443)
 }
 
 // Config is the root configuration structure
@@ -135,7 +136,8 @@ func setDefaults() {
 	viper.SetDefault("caddy.enabled", false)
 	viper.SetDefault("caddy.image", "docker.io/library/caddy:alpine")
 	viper.SetDefault("caddy.data_dir", "/var/lib/simplify")
-	viper.SetDefault("caddy.frontend_path", "") // Empty = use data_dir/www
+	viper.SetDefault("caddy.frontend_path", "")    // Empty = use data_dir/www
+	viper.SetDefault("caddy.dashboard_domain", "") // Empty = path-based on localhost/IP
 	viper.SetDefault("caddy.proxy_network", "simplify-proxy")
 	viper.SetDefault("caddy.admin_port", 2019)
 	viper.SetDefault("caddy.http_port", 80)
