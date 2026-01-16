@@ -102,33 +102,28 @@ EOF
 install_service() {
     log_info "Creating systemd service..."
     
-    # Create service user if not exists
-    if ! id "$SERVICE_USER" &>/dev/null; then
-        sudo useradd -r -s /bin/false "$SERVICE_USER"
-        log_info "Created service user: $SERVICE_USER"
+    # For simplicity, run as root to access system Podman socket
+    # Alternative: configure Podman socket for the service user
+    
+    # Enable and start Podman socket (system-wide)
+    if systemctl list-unit-files | grep -q podman.socket; then
+        log_info "Enabling Podman system socket..."
+        sudo systemctl enable --now podman.socket || true
     fi
     
-    # Set permissions
-    sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$DATA_DIR"
-    
-    # Add user to podman group if exists
-    if getent group podman &>/dev/null; then
-        sudo usermod -aG podman "$SERVICE_USER"
-    fi
-    
-    # Create systemd service
+    # Create systemd service (runs as root for Podman access)
     sudo tee /etc/systemd/system/simplify.service > /dev/null <<EOF
 [Unit]
 Description=Simplify Container Orchestrator
-After=network.target
+After=network.target podman.socket
+Requires=podman.socket
 
 [Service]
 Type=simple
-User=$SERVICE_USER
 ExecStart=$INSTALL_DIR/simplify server --config $CONFIG_DIR/config.yaml
 Restart=always
 RestartSec=5
-Environment=XDG_RUNTIME_DIR=/run/user/\$(id -u $SERVICE_USER)
+Environment=CONTAINER_HOST=unix:///run/podman/podman.sock
 
 [Install]
 WantedBy=multi-user.target

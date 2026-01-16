@@ -474,10 +474,23 @@ func getIPAddress(networks map[string]*define.InspectAdditionalNetwork) string {
 
 // getSocketPath returns the Podman socket path based on environment
 func getSocketPath() string {
+	// Check CONTAINER_HOST first (used by podman-remote and systemd services)
+	if sock := os.Getenv("CONTAINER_HOST"); sock != "" {
+		return sock
+	}
+
+	// Check PODMAN_SOCK for backwards compatibility
 	if sock := os.Getenv("PODMAN_SOCK"); sock != "" {
 		return "unix://" + sock
 	}
 
+	// Check for system Podman socket (used when running as root or with podman.socket)
+	systemSocket := "/run/podman/podman.sock"
+	if _, err := os.Stat(systemSocket); err == nil {
+		return "unix://" + systemSocket
+	}
+
+	// Check for macOS Podman Machine socket
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		homeDir = ""
@@ -487,7 +500,8 @@ func getSocketPath() string {
 		return "unix://" + macSocket
 	}
 
-	return fmt.Sprintf("unix://run/user/%d/podman/podman.sock", os.Getuid())
+	// Default to rootless user socket
+	return fmt.Sprintf("unix:///run/user/%d/podman/podman.sock", os.Getuid())
 }
 
 func envSliceToMap(env []string) map[string]string {

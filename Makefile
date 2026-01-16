@@ -19,6 +19,22 @@ build:
 build-release:
 	CGO_ENABLED=0 go build -tags "$(BUILD_TAGS)" $(LDFLAGS) -ldflags "-s -w" -o bin/$(BINARY_NAME) ./cmd/simplify
 
+# Cross-compile for Linux
+.PHONY: build-linux build-linux-amd64 build-linux-arm64
+
+build-linux-amd64:
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags "$(BUILD_TAGS)" $(LDFLAGS) -ldflags "-s -w" -o bin/$(BINARY_NAME)-linux-amd64 ./cmd/simplify
+
+build-linux-arm64:
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags "$(BUILD_TAGS)" $(LDFLAGS) -ldflags "-s -w" -o bin/$(BINARY_NAME)-linux-arm64 ./cmd/simplify
+
+build-linux: build-linux-amd64 build-linux-arm64
+	@echo "Built Linux binaries: bin/$(BINARY_NAME)-linux-amd64, bin/$(BINARY_NAME)-linux-arm64"
+
+# Build all release binaries
+build-release-all: build-linux build-release
+	@echo "Built all release binaries"
+
 run: build
 	./bin/$(BINARY_NAME)
 
