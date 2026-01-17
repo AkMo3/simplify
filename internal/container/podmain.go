@@ -234,7 +234,7 @@ func (c *Client) RunWithMounts(ctx context.Context, opts RunOptions) (string, er
 				"target", m.Target,
 				"readonly", m.ReadOnly,
 			)
-			mountOpts := []string{"bind"}
+			mountOpts := []string{"rbind"}
 			if m.ReadOnly {
 				mountOpts = append(mountOpts, "ro")
 			}

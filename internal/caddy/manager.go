@@ -257,15 +257,7 @@ func (m *Manager) startContainer(ctx context.Context) error {
 	ports := map[uint16]uint16{
 		uint16(m.cfg.HTTPPort):  80,
 		uint16(m.cfg.HTTPSPort): 443,
-	}
-
-	// Secure bindings: Admin on localhost only
-	portBindings := []container.PortBinding{
-		{
-			HostIP:        "127.0.0.1",
-			HostPort:      uint16(m.cfg.AdminPort),
-			ContainerPort: 2019,
-		},
+		uint16(m.cfg.AdminPort): 2019,
 	}
 
 	// Labels for identification
@@ -307,13 +299,12 @@ func (m *Manager) startContainer(ctx context.Context) error {
 	}
 
 	opts := container.RunOptions{
-		Name:         containerName,
-		Image:        m.cfg.Image,
-		Ports:        ports,
-		PortBindings: portBindings,
-		Env:          []string{},
-		Labels:       labels,
-		Mounts:       mounts,
+		Name:   containerName,
+		Image:  m.cfg.Image,
+		Ports:  ports,
+		Env:    []string{},
+		Labels: labels,
+		Mounts: mounts,
 		// Do not set NetworkName initially - start on default bridge for external connectivity
 	}
 
