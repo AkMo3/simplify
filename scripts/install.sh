@@ -22,6 +22,16 @@ DATA_DIR="/var/lib/simplify"
 CONFIG_DIR="/etc/simplify"
 SERVICE_USER="simplify"
 REPO="AkMo3/simplify"
+VERSION=""
+
+# Parse arguments
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        -t|--tag) VERSION="$2"; shift ;;
+        *) echo "Unknown parameter passed: $1"; exit 1 ;;
+    esac
+    shift
+done
 
 # Detect architecture
 ARCH=$(uname -m)
@@ -54,8 +64,14 @@ check_podman() {
 download_binary() {
     log_info "Downloading Simplify for $OS-$ARCH..."
     
-    # Get latest release URL
-    BASE_URL="https://github.com/$REPO/releases/latest/download"
+    # Get release URL
+    if [ -n "$VERSION" ]; then
+        log_info "Using version: $VERSION"
+        BASE_URL="https://github.com/$REPO/releases/download/$VERSION"
+    else
+        log_info "Using latest release"
+        BASE_URL="https://github.com/$REPO/releases/latest/download"
+    fi
     BINARY_URL="$BASE_URL/simplify-$OS-$ARCH"
     WEB_DIST_URL="$BASE_URL/web-dist.zip"
     
