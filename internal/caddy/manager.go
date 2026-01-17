@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"text/template"
+	"time"
 
 	"github.com/AkMo3/simplify/internal/config"
 	"github.com/AkMo3/simplify/internal/container"
@@ -314,6 +315,10 @@ func (m *Manager) startContainer(ctx context.Context) error {
 	}
 
 	// Connect to proxy network for internal communication
+	// Wait briefly to ensure Netavark has set up the primary network rules (DNAT)
+	// This mitigates a known race condition/bug in Podman/Netavark where connecting too soon fails port forwarding
+	time.Sleep(2 * time.Second)
+
 	if m.cfg.ProxyNetwork != "" {
 		if err := m.container.ConnectNetwork(ctx, containerName, m.cfg.ProxyNetwork); err != nil {
 			logger.ErrorCtx(ctx, "Failed to connect Caddy to proxy network", "network", m.cfg.ProxyNetwork, "error", err)
