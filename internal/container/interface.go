@@ -15,6 +15,7 @@ type ContainerManager interface {
 	List(ctx context.Context, all bool) ([]ContainerInfo, error)
 	Logs(ctx context.Context, name string, follow bool, tail string) error
 	GetContainer(ctx context.Context, nameOrID string) (*ContainerInfo, error)
+	GetContainerByAppID(ctx context.Context, appID string) (*ContainerInfo, error)
 	InspectImage(ctx context.Context, image string) (*ImageInfo, error)
 	CreatePod(ctx context.Context, name string, ports map[uint16]uint16) (string, error)
 	RemovePod(ctx context.Context, nameOrID string, force bool) error

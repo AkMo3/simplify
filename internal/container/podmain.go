@@ -495,6 +495,45 @@ func (c *Client) GetContainer(ctx context.Context, nameOrID string) (*ContainerI
 	}, nil
 }
 
+// GetContainerByAppID returns the container info by looking up the simplify.app.id label
+func (c *Client) GetContainerByAppID(ctx context.Context, appID string) (*ContainerInfo, error) {
+	logger.DebugCtx(ctx, "Getting container by app ID", "app_id", appID)
+
+	filters := map[string][]string{
+		"label": {fmt.Sprintf("simplify.app.id=%s", appID)},
+	}
+
+	opts := &containers.ListOptions{
+		Filters: filters,
+		All:     ptrBool(true),
+	}
+
+	listContainers, err := containers.List(c.ctx, opts)
+	if err != nil {
+		return nil, fmt.Errorf("listing containers by app ID: %w", err)
+	}
+
+	if len(listContainers) == 0 {
+		return nil, fmt.Errorf("container for app %s not found", appID)
+	}
+
+	// If multiple, try to find the running one
+	var targetContainer *entities.ListContainer
+	for i := range listContainers {
+		if listContainers[i].State == "running" {
+			targetContainer = &listContainers[i]
+			break
+		}
+	}
+	if targetContainer == nil {
+		targetContainer = &listContainers[0]
+	}
+
+	// Use GetContainer logic to populate full details (IPs, exposed ports etc)
+	// Inspect by ID is safe now as we have the container ID
+	return c.GetContainer(ctx, targetContainer.ID)
+}
+
 // InspectImage returns information about an image
 func (c *Client) InspectImage(ctx context.Context, name string) (*ImageInfo, error) {
 	logger.DebugCtx(ctx, "Inspecting image", "image", name)

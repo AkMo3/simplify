@@ -108,7 +108,7 @@ func (s *Server) handleGetApplication(w http.ResponseWriter, r *http.Request) er
 	}
 
 	// Fetch runtime info
-	info, err := s.container.GetContainer(r.Context(), app.ID)
+	info, err := s.container.GetContainerByAppID(r.Context(), app.ID)
 	if err != nil {
 		// Log error but return DB state (likely stopped or previous state)
 		logger.ErrorCtx(r.Context(), "Error inspecting container", "id", app.ID, "error", err)
