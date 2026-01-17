@@ -16,6 +16,7 @@ import (
 	"github.com/containers/podman/v5/pkg/bindings/pods"
 	"github.com/containers/podman/v5/pkg/domain/entities"
 	"github.com/containers/podman/v5/pkg/specgen"
+	spec "github.com/opencontainers/runtime-spec/specs-go"
 	nettypes "go.podman.io/common/libnetwork/types"
 )
 
@@ -225,7 +226,7 @@ func (c *Client) RunWithMounts(ctx context.Context, opts RunOptions) (string, er
 		s.CNINetworks = []string{opts.NetworkName}
 	}
 
-	// Handle mounts using Volumes (bind mounts)
+	// Handle mounts using OCI spec Mounts (for bind mounts)
 	if len(opts.Mounts) > 0 {
 		for _, m := range opts.Mounts {
 			logger.DebugCtx(ctx, "Adding bind mount",
@@ -233,14 +234,15 @@ func (c *Client) RunWithMounts(ctx context.Context, opts RunOptions) (string, er
 				"target", m.Target,
 				"readonly", m.ReadOnly,
 			)
-			// Use Volumes for bind mounts in the format source:dest[:options]
-			mountStr := m.Source + ":" + m.Target
+			mountOpts := []string{"bind"}
 			if m.ReadOnly {
-				mountStr += ":ro"
+				mountOpts = append(mountOpts, "ro")
 			}
-			s.Volumes = append(s.Volumes, &specgen.NamedVolume{
-				Name: m.Source,
-				Dest: m.Target,
+			s.Mounts = append(s.Mounts, spec.Mount{
+				Type:        "bind",
+				Source:      m.Source,
+				Destination: m.Target,
+				Options:     mountOpts,
 			})
 		}
 	}
