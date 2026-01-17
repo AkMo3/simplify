@@ -224,6 +224,8 @@ main() {
     echo ""
     echo "Access the web UI at: http://localhost"
     echo ""
+    echo "IMPORTANT: Please modify $CONFIG_DIR/config.yaml to add your dashboard URL (caddy.dashboard_domain)."
+    echo ""
 }
 
 main "$@"
