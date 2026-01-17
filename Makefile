@@ -1,4 +1,4 @@
-.PHONY: build run test test-unit test-integration test-coverage lint fmt clean install
+.PHONY: build run test test-unit test-integration test-coverage lint fmt clean install bundle
 
 BINARY_NAME=simplify
 BUILD_TAGS=remote exclude_graphdriver_btrfs btrfs_noversion exclude_graphdriver_devicemapper containers_image_openpgp
@@ -66,6 +66,19 @@ build-all: build-frontend-prod build-release package-frontend
 release: build-linux package-frontend
 	@echo "Release artifacts ready in bin/"
 	@ls -la bin/
+
+# Bundle release assets into dist/
+bundle: release
+	@echo "Bundling release assets..."
+	@rm -rf dist && mkdir -p dist
+	@cp bin/$(BINARY_NAME)-linux-amd64 dist/
+	@cp bin/$(BINARY_NAME)-linux-arm64 dist/
+	@cp bin/web-dist.zip dist/
+	@cp scripts/install.sh dist/
+	@echo "Generating checksums..."
+	@cd dist && (which sha256sum > /dev/null && sha256sum * || shasum -a 256 *) > SHA256SUMS
+	@echo "Bundle created in dist/:"
+	@ls -la dist/
 
 # Run with hot reload (requires air)
 dev:
