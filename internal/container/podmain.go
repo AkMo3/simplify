@@ -186,12 +186,12 @@ func (c *Client) RunWithMounts(ctx context.Context, opts RunOptions) (string, er
 
 			// Handle legacy Ports map (defaults to 0.0.0.0)
 			for hostPort, containerPort := range opts.Ports {
-				logger.DebugCtx(ctx, "Adding port mapping (0.0.0.0)",
+				logger.DebugCtx(ctx, "Adding port mapping \"\" to match all ip",
 					"host_port", hostPort,
 					"container_port", containerPort,
 				)
 				s.PortMappings = append(s.PortMappings, nettypes.PortMapping{
-					HostIP:        "0.0.0.0",
+					HostIP:        "",
 					HostPort:      hostPort,
 					ContainerPort: containerPort,
 					Protocol:      "tcp",
@@ -205,11 +205,7 @@ func (c *Client) RunWithMounts(ctx context.Context, opts RunOptions) (string, er
 					"host_port", binding.HostPort,
 					"container_port", binding.ContainerPort,
 				)
-				// Default to 0.0.0.0 if not specified
 				hostIP := binding.HostIP
-				if hostIP == "" {
-					hostIP = "0.0.0.0"
-				}
 				s.PortMappings = append(s.PortMappings, nettypes.PortMapping{
 					HostIP:        hostIP,
 					HostPort:      binding.HostPort,
