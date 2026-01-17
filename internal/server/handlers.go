@@ -78,7 +78,7 @@ func (s *Server) handleListApplications(w http.ResponseWriter, r *http.Request) 
 	for i := range apps {
 		if info, ok := containerMap[apps[i].ID]; ok {
 			apps[i].Status = info.Status
-			apps[i].Ports = info.Ports
+			apps[i].Ports = invertPorts(info.Ports)
 			apps[i].IPAddress = info.IPAddress
 			apps[i].ExposedPorts = info.ExposedPorts
 			apps[i].ConnectedNetworks = info.Networks
@@ -117,7 +117,7 @@ func (s *Server) handleGetApplication(w http.ResponseWriter, r *http.Request) er
 		}
 	} else {
 		app.Status = info.Status
-		app.Ports = info.Ports
+		app.Ports = invertPorts(info.Ports)
 		app.IPAddress = info.IPAddress
 		app.ExposedPorts = info.ExposedPorts
 		app.ConnectedNetworks = info.Networks
@@ -656,4 +656,18 @@ func (s *Server) handleDeleteNetwork(w http.ResponseWriter, r *http.Request) err
 
 	writeNoContent(w)
 	return nil
+}
+
+// invertPorts flips the key/value of the ports map.
+// Input: ContainerPort -> HostPort (e.g. "80/tcp" -> "0.0.0.0:8080")
+// Output: HostPort -> ContainerPort (e.g. "0.0.0.0:8080" -> "80/tcp")
+// This is needed because the API/Frontend expects Host -> Container, but Podman returns Container -> Host.
+func invertPorts(ports map[string]string) map[string]string {
+	result := make(map[string]string, len(ports))
+	for containerPort, hostPort := range ports {
+		if hostPort != "" {
+			result[hostPort] = containerPort
+		}
+	}
+	return result
 }
