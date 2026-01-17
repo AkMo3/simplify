@@ -300,13 +300,13 @@ func (m *Manager) startContainer(ctx context.Context) error {
 	}
 
 	opts := container.RunOptions{
-		Name:   containerName,
-		Image:  m.cfg.Image,
-		Ports:  ports,
-		Env:    []string{},
-		Labels: labels,
-		Mounts: mounts,
-		// Do not set NetworkName initially - start on default bridge for external connectivity
+		Name:        containerName,
+		Image:       m.cfg.Image,
+		Ports:       ports,
+		Env:         []string{},
+		Labels:      labels,
+		Mounts:      mounts,
+		NetworkName: "podman",
 	}
 
 	_, err := m.container.RunWithMounts(ctx, opts)
