@@ -223,12 +223,17 @@ func (m *Manager) generateCaddyfile(apps []AppRoute) error {
 		return fmt.Errorf("parsing template: %w", err)
 	}
 
+	host := "localhost"
+	if m.cfg.DashboardDomain != "" {
+		host = m.cfg.DashboardDomain
+	}
+
 	data := struct {
 		SimplifyHost string
 		APIUpstream  string
 		Apps         []AppRoute
 	}{
-		SimplifyHost: "localhost", // Default to localhost for development
+		SimplifyHost: host,
 		APIUpstream:  fmt.Sprintf("host.containers.internal:%d", m.serverPort),
 		Apps:         apps,
 	}
