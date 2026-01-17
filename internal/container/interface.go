@@ -35,16 +35,24 @@ type Mount struct {
 	ReadOnly bool
 }
 
+// PortBinding represents a port mapping
+type PortBinding struct {
+	HostIP        string
+	HostPort      uint16
+	ContainerPort uint16
+}
+
 // RunOptions contains all options for running a container
 type RunOptions struct {
-	Name        string
-	Image       string
-	Ports       map[uint16]uint16
-	Env         []string
-	Labels      map[string]string
-	PodName     string
-	NetworkName string
-	Mounts      []Mount
+	Name         string
+	Image        string
+	Ports        map[uint16]uint16
+	PortBindings []PortBinding
+	Env          []string
+	Labels       map[string]string
+	PodName      string
+	NetworkName  string
+	Mounts       []Mount
 }
 
 // ImageInfo holds image metadata

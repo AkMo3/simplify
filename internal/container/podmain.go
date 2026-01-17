@@ -170,25 +170,52 @@ func (c *Client) RunWithMounts(ctx context.Context, opts RunOptions) (string, er
 	s.Labels = opts.Labels
 
 	// Handle pod or ports
+	// Handle pod or ports
 	switch {
 	case opts.PodName != "":
 		s.Pod = opts.PodName
-		if len(opts.Ports) > 0 {
+		if len(opts.Ports) > 0 || len(opts.PortBindings) > 0 {
 			logger.DebugCtx(ctx, "Ignoring container ports because running in a Pod", "pod", opts.PodName)
 		}
-	case len(opts.Ports) > 0:
-		s.PortMappings = make([]nettypes.PortMapping, 0, len(opts.Ports))
-		for hostPort, containerPort := range opts.Ports {
-			logger.DebugCtx(ctx, "Adding port mapping",
-				"host_port", hostPort,
-				"container_port", containerPort,
-			)
-			s.PortMappings = append(s.PortMappings, nettypes.PortMapping{
-				HostIP:        "0.0.0.0", // Caddy needs external access
-				HostPort:      hostPort,
-				ContainerPort: containerPort,
-				Protocol:      "tcp",
-			})
+	default:
+		// Initialize mappings if ports are present
+		totalPorts := len(opts.Ports) + len(opts.PortBindings)
+		if totalPorts > 0 {
+			s.PortMappings = make([]nettypes.PortMapping, 0, totalPorts)
+
+			// Handle legacy Ports map (defaults to 0.0.0.0)
+			for hostPort, containerPort := range opts.Ports {
+				logger.DebugCtx(ctx, "Adding port mapping (0.0.0.0)",
+					"host_port", hostPort,
+					"container_port", containerPort,
+				)
+				s.PortMappings = append(s.PortMappings, nettypes.PortMapping{
+					HostIP:        "0.0.0.0",
+					HostPort:      hostPort,
+					ContainerPort: containerPort,
+					Protocol:      "tcp",
+				})
+			}
+
+			// Handle granular PortBindings
+			for _, binding := range opts.PortBindings {
+				logger.DebugCtx(ctx, "Adding port binding",
+					"host_ip", binding.HostIP,
+					"host_port", binding.HostPort,
+					"container_port", binding.ContainerPort,
+				)
+				// Default to 0.0.0.0 if not specified
+				hostIP := binding.HostIP
+				if hostIP == "" {
+					hostIP = "0.0.0.0"
+				}
+				s.PortMappings = append(s.PortMappings, nettypes.PortMapping{
+					HostIP:        hostIP,
+					HostPort:      binding.HostPort,
+					ContainerPort: binding.ContainerPort,
+					Protocol:      "tcp",
+				})
+			}
 		}
 	}
 
