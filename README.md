@@ -50,6 +50,23 @@ Simplify aims to be a modern alternative to platforms like Coolify, Dokploy, wit
 
 ## Installation
 
+To install the latest version of Simplify, run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AkMo3/simplify/main/scripts/install.sh | bash
+```
+
+### Installing a Specific Version
+
+You can install a specific version using the `-t` or `--tag` argument:
+
+```bash
+# Install version v0.1.0
+curl -fsSL https://raw.githubusercontent.com/AkMo3/simplify/main/scripts/install.sh | bash -s -- --tag v0.1.0
+```
+
+### Building from Source
+
 ```bash
 # Clone the repository
 git clone https://github.com/AkMo3/simplify.git

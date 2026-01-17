@@ -74,7 +74,6 @@ bundle: release
 	@cp bin/$(BINARY_NAME)-linux-amd64 dist/
 	@cp bin/$(BINARY_NAME)-linux-arm64 dist/
 	@cp bin/web-dist.zip dist/
-	@cp scripts/install.sh dist/
 	@echo "Generating checksums..."
 	@cd dist && (which sha256sum > /dev/null && sha256sum * || shasum -a 256 *) > SHA256SUMS
 	@echo "Bundle created in dist/:"
