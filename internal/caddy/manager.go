@@ -222,17 +222,12 @@ func (m *Manager) generateCaddyfile(apps []AppRoute) error {
 		return fmt.Errorf("parsing template: %w", err)
 	}
 
-	host := ":80"
-	if m.cfg.DashboardDomain != "" {
-		host = m.cfg.DashboardDomain
-	}
-
 	data := struct {
 		SimplifyHost string
 		APIUpstream  string
 		Apps         []AppRoute
 	}{
-		SimplifyHost: host,
+		SimplifyHost: "localhost", // Default to localhost for development
 		APIUpstream:  fmt.Sprintf("host.containers.internal:%d", m.serverPort),
 		Apps:         apps,
 	}
@@ -304,18 +299,28 @@ func (m *Manager) startContainer(ctx context.Context) error {
 	}
 
 	opts := container.RunOptions{
-		Name:        containerName,
-		Image:       m.cfg.Image,
-		Ports:       ports,
-		Env:         []string{},
-		Labels:      labels,
-		NetworkName: m.cfg.ProxyNetwork,
-		Mounts:      mounts,
+		Name:   containerName,
+		Image:  m.cfg.Image,
+		Ports:  ports,
+		Env:    []string{},
+		Labels: labels,
+		Mounts: mounts,
+		// Do not set NetworkName initially - start on default bridge for external connectivity
 	}
 
 	_, err := m.container.RunWithMounts(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("starting Caddy container: %w", err)
+	}
+
+	// Connect to proxy network for internal communication
+	if m.cfg.ProxyNetwork != "" {
+		if err := m.container.ConnectNetwork(ctx, containerName, m.cfg.ProxyNetwork); err != nil {
+			logger.ErrorCtx(ctx, "Failed to connect Caddy to proxy network", "network", m.cfg.ProxyNetwork, "error", err)
+			// Don't fail completely, but warn
+		} else {
+			logger.DebugCtx(ctx, "Connected Caddy to proxy network", "network", m.cfg.ProxyNetwork)
+		}
 	}
 
 	logger.InfoCtx(ctx, "Caddy container started")

@@ -21,16 +21,11 @@ type ContainerManager interface {
 	PodExists(ctx context.Context, nameOrID string) (bool, error)
 	ListPods(ctx context.Context) ([]PodInfo, error)
 	InspectPod(ctx context.Context, nameOrID string) (*PodInfo, error)
-	CreateNetwork(ctx context.Context, name string, opts NetworkOptions) (string, error)
+	CreateNetwork(ctx context.Context, name string) (string, error)
 	RemoveNetwork(ctx context.Context, nameOrID string) error
 	ListNetworks(ctx context.Context) ([]NetworkInfo, error)
 	ConnectNetwork(ctx context.Context, container, network string) error
 	DisconnectNetwork(ctx context.Context, container, network string) error
-}
-
-// NetworkOptions contains options for creating a network
-type NetworkOptions struct {
-	MTU int
 }
 
 // Mount represents a volume mount for a container

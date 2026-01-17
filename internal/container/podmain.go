@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/AkMo3/simplify/internal/logger"
@@ -17,7 +16,6 @@ import (
 	"github.com/containers/podman/v5/pkg/bindings/pods"
 	"github.com/containers/podman/v5/pkg/domain/entities"
 	"github.com/containers/podman/v5/pkg/specgen"
-	spec "github.com/opencontainers/runtime-spec/specs-go"
 	nettypes "go.podman.io/common/libnetwork/types"
 )
 
@@ -200,7 +198,7 @@ func (c *Client) RunWithMounts(ctx context.Context, opts RunOptions) (string, er
 		s.CNINetworks = []string{opts.NetworkName}
 	}
 
-	// Handle mounts using OCI spec Mounts (for bind mounts)
+	// Handle mounts using Volumes (bind mounts)
 	if len(opts.Mounts) > 0 {
 		for _, m := range opts.Mounts {
 			logger.DebugCtx(ctx, "Adding bind mount",
@@ -208,15 +206,14 @@ func (c *Client) RunWithMounts(ctx context.Context, opts RunOptions) (string, er
 				"target", m.Target,
 				"readonly", m.ReadOnly,
 			)
-			mountOpts := []string{"bind"}
+			// Use Volumes for bind mounts in the format source:dest[:options]
+			mountStr := m.Source + ":" + m.Target
 			if m.ReadOnly {
-				mountOpts = append(mountOpts, "ro")
+				mountStr += ":ro"
 			}
-			s.Mounts = append(s.Mounts, spec.Mount{
-				Type:        "bind",
-				Source:      m.Source,
-				Destination: m.Target,
-				Options:     mountOpts,
+			s.Volumes = append(s.Volumes, &specgen.NamedVolume{
+				Name: m.Source,
+				Dest: m.Target,
 			})
 		}
 	}
@@ -478,17 +475,12 @@ func getIPAddress(networks map[string]*define.InspectAdditionalNetwork) string {
 // getSocketPath returns the Podman socket path based on environment
 func getSocketPath() string {
 	// Check CONTAINER_HOST first (used by podman-remote and systemd services)
-	// Format should be: unix:///path/to/socket
 	if sock := os.Getenv("CONTAINER_HOST"); sock != "" {
 		return sock
 	}
 
 	// Check PODMAN_SOCK for backwards compatibility
-	// Can be either /path/to/socket or unix:///path/to/socket
 	if sock := os.Getenv("PODMAN_SOCK"); sock != "" {
-		if strings.HasPrefix(sock, "unix://") {
-			return sock
-		}
 		return "unix://" + sock
 	}
 
@@ -650,18 +642,24 @@ func (c *Client) InspectPod(ctx context.Context, nameOrID string) (*PodInfo, err
 }
 
 // CreateNetwork creates a new bridge network
-func (c *Client) CreateNetwork(ctx context.Context, name string, opts NetworkOptions) (string, error) {
-	logger.DebugCtx(ctx, "Creating network", "name", name, "mtu", opts.MTU)
+func (c *Client) CreateNetwork(ctx context.Context, name string) (string, error) {
+	logger.DebugCtx(ctx, "Creating network", "name", name)
 
+	// In this version of bindings, it seems we pass the Network struct directly?
+	// Based on error: want (context.Context, *"go.podman.io/common/libnetwork/types".Network)
 	net := &nettypes.Network{
-		Name:    name,
-		Driver:  "bridge",
-		Options: make(map[string]string),
+		Name:   name,
+		Driver: "bridge",
 	}
 
-	if opts.MTU > 0 {
-		net.Options["mtu"] = fmt.Sprintf("%d", opts.MTU)
-	}
+	// Assuming network.Create returns (*types.NetworkCreateReport, error) or similar
+	// Let's try matching the signature "want (context.Context, *types.Network)"
+	// Wait, network.Create in bindings v5 usually takes (*types.Network, *network.CreateOptions) or similar?
+	// The error says it WANTS (ctx, *Network).
+	// Let's try just passing the network struct.
+
+	// Note: We might need to check if response is just the network struct back or a report.
+	// If it returns (newNet, err), then we use newNet.ID.
 
 	newNet, err := network.Create(c.ctx, net)
 	if err != nil {

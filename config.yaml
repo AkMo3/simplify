@@ -22,7 +22,6 @@ caddy:
   image: "docker.io/library/caddy:alpine"
   data_dir: "/var/lib/simplify"     # Directory for Caddyfile and Caddy data
   frontend_path: "./web/dist"       # Path to built frontend (run 'make build-frontend' first)
-  dashboard_domain: ""              # Domain for the dashboard (empty = bind to :80 directly)
   proxy_network: "simplify-proxy"   # Network for proxied containers
   admin_port: 2019                  # Caddy admin API (bound to 127.0.0.1)
   http_port: 80                     # HTTP port (bound to 0.0.0.0)

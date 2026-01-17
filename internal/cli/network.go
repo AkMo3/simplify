@@ -72,7 +72,7 @@ func runNetworkCreate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to connect to container engine: %w", err)
 	}
 
-	id, err := client.CreateNetwork(ctx, args[0], container.NetworkOptions{})
+	id, err := client.CreateNetwork(ctx, args[0])
 	if err != nil {
 		return fmt.Errorf("failed to create network: %w", err)
 	}

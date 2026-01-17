@@ -79,7 +79,7 @@ func (m *MockContainerManager) InspectPod(ctx context.Context, nameOrID string) 
 		Status: "Running",
 	}, nil
 }
-func (m *MockContainerManager) CreateNetwork(ctx context.Context, name string, opts container.NetworkOptions) (string, error) {
+func (m *MockContainerManager) CreateNetwork(ctx context.Context, name string) (string, error) {
 	return "mock-net-id", nil
 }
 func (m *MockContainerManager) RemoveNetwork(ctx context.Context, nameOrID string) error {

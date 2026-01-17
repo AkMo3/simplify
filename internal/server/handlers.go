@@ -591,7 +591,7 @@ func (s *Server) handleCreateNetwork(w http.ResponseWriter, r *http.Request) err
 	}
 
 	// Create in Container Engine
-	id, err := s.container.CreateNetwork(r.Context(), network.Name, container.NetworkOptions{})
+	id, err := s.container.CreateNetwork(r.Context(), network.Name)
 	if err != nil {
 		return errors.NewInternalErrorWithCause("failed to create network in backend", err)
 	}
