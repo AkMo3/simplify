@@ -12,6 +12,7 @@ import {
   Terminal,
   Settings,
   ExternalLink,
+  Globe,
 } from 'lucide-react'
 import { Button, Badge, Modal } from '@/components/ui'
 import { useApplication, useDeleteApplication } from '@/hooks/useApplications' // Assuming we might need update hook but using direct api for now or maybe add it 
@@ -21,6 +22,7 @@ import { Network as NetworkIcon } from 'lucide-react'
 import { useNetworks } from '@/hooks/useNetworks'
 import { usePods } from '@/hooks/usePods'
 import { EditApplicationConnectionModal } from '@/components/applications/EditApplicationConnectionModal'
+import type { UpdateApplicationRequest } from '@/types/api'
 
 export function ApplicationDetail() {
   const { id } = useParams<{ id: string }>()
@@ -115,16 +117,66 @@ export function ApplicationDetail() {
         }
       })
 
-      await updateApplication(app.id, {
+      const payload: UpdateApplicationRequest = {
         name: app.name,
         image: app.image,
+        environment_id: app.environment_id,
+        replicas: app.replicas,
+        pod_id: app.pod_id,
+        network_id: app.network_id,
+        env_vars: app.env_vars,
+        health_check: app.health_check,
+        proxy_hostname: app.proxy_hostname,
+        proxy_port: app.proxy_port,
         ports: portsRecord,
-      })
+      }
+
+      await updateApplication(app.id, payload)
 
       await refetch()
       setIsEditingPorts(false)
     } catch (error) {
       console.error('Failed to update ports:', error)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const [isEditingProxy, setIsEditingProxy] = useState(false)
+  const [proxyConfig, setProxyConfig] = useState({ hostname: '', port: '' })
+
+  const handleStartEditProxy = () => {
+    if (!app) return
+    setIsEditingProxy(true)
+    setProxyConfig({
+      hostname: app.proxy_hostname || '',
+      port: app.proxy_port ? app.proxy_port.toString() : ''
+    })
+  }
+
+  const handleSaveProxy = async () => {
+    if (!app) return
+    setIsSaving(true)
+    try {
+      const payload: UpdateApplicationRequest = {
+        name: app.name,
+        image: app.image,
+        environment_id: app.environment_id,
+        replicas: app.replicas,
+        pod_id: app.pod_id,
+        network_id: app.network_id,
+        ports: app.ports,
+        env_vars: app.env_vars,
+        health_check: app.health_check,
+        proxy_hostname: proxyConfig.hostname,
+        proxy_port: proxyConfig.port ? parseInt(proxyConfig.port) : 0,
+      }
+
+      await updateApplication(app.id, payload)
+      await refetch()
+      setIsEditingProxy(false)
+    } catch (error) {
+      console.error('Failed to update proxy config:', error)
     } finally {
       setIsSaving(false)
     }
@@ -305,6 +357,113 @@ export function ApplicationDetail() {
                   <span className="font-medium text-muted-foreground">Default Bridge</span>
                 )}
               </div>
+            )}
+          </motion.div>
+
+          {/* Proxy Configuration */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.18 }}
+            className="card p-6"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-medium flex items-center gap-2">
+                <Globe className="h-5 w-5 text-muted-foreground" />
+                Proxy Configuration
+              </h2>
+              {!isEditingProxy ? (
+                <Button variant="ghost" size="sm" onClick={handleStartEditProxy}>
+                  Edit
+                </Button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsEditingProxy(false)}
+                    disabled={isSaving}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleSaveProxy}
+                    isLoading={isSaving}
+                  >
+                    Save
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {isEditingProxy ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Hostname</label>
+                  <input
+                    type="text"
+                    value={proxyConfig.hostname}
+                    onChange={(e) => setProxyConfig({ ...proxyConfig, hostname: e.target.value })}
+                    placeholder="e.g. app.example.com"
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Leave empty to disable proxy.
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Target Port</label>
+                  <select
+                    value={proxyConfig.port}
+                    onChange={(e) => setProxyConfig({ ...proxyConfig, port: e.target.value })}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <option value="">Select a port...</option>
+                    {/* Combine exposed ports and mapped ports */}
+                    {Array.from(new Set([
+                      ...(app.exposed_ports || []),
+                      ...Object.keys(app.ports || {}).map(k => app.ports[k]) // container ports
+                    ])).map(portStr => {
+                      // Clean port string (e.g. 80/tcp -> 80)
+                      const port = portStr.split('/')[0]
+                      return (
+                        <option key={portStr} value={port}>
+                          {port}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </div>
+              </div>
+            ) : (
+              app.proxy_hostname ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between py-2 px-3 bg-muted/50 rounded-md">
+                    <span className="font-mono text-sm">{app.proxy_hostname}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">→ :{app.proxy_port}</span>
+                      <a
+                        href={`https://${app.proxy_hostname}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded bg-background/50 text-xs hover:bg-background transition-colors"
+                      >
+                        Open
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-green-500">
+                    <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                    Proxy Enabled
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Proxy not configured. Enable to access via domain.
+                </p>
+              )
             )}
           </motion.div>
 

@@ -54,6 +54,97 @@ func NewClient(ctx context.Context) (*Client, error) {
 	return &Client{ctx: ctx}, nil
 }
 
+// EnsureImage checks if an image exists locally, and pulls it if not.
+// It handles short-name resolution errors by falling back to docker.io/library/ prefix.
+func (c *Client) EnsureImage(ctx context.Context, imageRef string) error {
+	logger.DebugCtx(ctx, "Checking if image exists", "image", imageRef)
+
+	exists, err := images.Exists(c.ctx, imageRef, nil)
+	if err != nil {
+		return fmt.Errorf("checking image existence: %w\nIf using short names (e.g. 'nginx'), try fully qualified name (e.g. 'docker.io/library/nginx')", err)
+	}
+
+	if exists {
+		logger.DebugCtx(ctx, "Image already exists locally", "image", imageRef)
+		return nil
+	}
+
+	logger.InfoCtx(ctx, "Pulling image", "image", imageRef)
+	_, err = images.Pull(c.ctx, imageRef, nil)
+	if err == nil {
+		logger.InfoCtx(ctx, "Image pulled successfully", "image", imageRef)
+		return nil
+	}
+
+	// Check if error is due to short-name resolution
+	// Podman Error: "short-name \"nginx:latest\" did not resolve to an alias..."
+	// We blindly try to prepend docker.io/library/ if it looks like a short name (no domain)
+	// Or simply try fallback if pull failed.
+
+	// Attempt fallback to Docker Hub
+	// Logic: If imageRef has no domain (no dot/colon before slash), verify.
+	// But simpler: just try docker.io/library/<image> or docker.io/<image>
+
+	// If input was "nginx", try "docker.io/library/nginx"
+	// If input was "akmo/simplify", try "docker.io/akmo/simplify"
+	// If input has no "/", assume library.
+
+	fallbackRef := ""
+	// Primitive heuristic: if no domain-like prefix (contains ".")
+	// This is loose but usually works for common cases.
+
+	// Try standard Docker Hub expansion
+	// Case 1: "nginx" -> "docker.io/library/nginx"
+	// Case 2: "user/repo" -> "docker.io/user/repo"
+
+	importStr := "docker.io/"
+	if !containsDomain(imageRef) {
+		if !containsSlash(imageRef) {
+			fallbackRef = importStr + "library/" + imageRef
+		} else {
+			fallbackRef = importStr + imageRef
+		}
+	}
+
+	if fallbackRef != "" && fallbackRef != imageRef {
+		logger.WarnCtx(ctx, "Pull failed, retrying with fully qualified name", "original", imageRef, "fallback", fallbackRef, "error", err)
+		_, err2 := images.Pull(c.ctx, fallbackRef, nil)
+		if err2 == nil {
+			logger.InfoCtx(ctx, "Image pulled successfully using fallback", "image", fallbackRef)
+			return nil
+		}
+		// If fallback failed, return original error to avoid confusion, or combined?
+		// Return original error is usually better, but maybe log fallback error.
+		return fmt.Errorf("pull failed for '%s' (error: %v) and fallback '%s' (error: %v)", imageRef, err, fallbackRef, err2)
+	}
+
+	return fmt.Errorf("pulling image %s: %w", imageRef, err)
+}
+
+func containsDomain(s string) bool {
+	// Crude check: looks for dot before the first slash.
+	// Does not handle localhost ports well if no slash.
+	// But standard short names don't have dots.
+	for i := 0; i < len(s); i++ {
+		if s[i] == '/' {
+			return false
+		}
+		if s[i] == '.' {
+			return true
+		}
+	}
+	return false
+}
+
+func containsSlash(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] == '/' {
+			return true
+		}
+	}
+	return false
+}
+
 // Context returns the connection context for direct API calls if needed
 func (c *Client) Context() context.Context {
 	return c.ctx
@@ -61,21 +152,9 @@ func (c *Client) Context() context.Context {
 
 // Run creates and starts a container
 func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]uint16, env []string, labels map[string]string, podName, networkName string) (string, error) {
-	logger.DebugCtx(ctx, "Checking if image exists", "image", image)
-
-	// Pull image if not exists
-	exists, err := images.Exists(c.ctx, image, nil)
-	if err != nil {
-		return "", fmt.Errorf("checking image: %w", err)
-	}
-
-	if !exists {
-		logger.InfoCtx(ctx, "Pulling image", "image", image)
-		_, err = images.Pull(c.ctx, image, nil)
-		if err != nil {
-			return "", fmt.Errorf("pulling image: %w", err)
-		}
-		logger.DebugCtx(ctx, "Image pulled successfully", "image", image)
+	// Ensure image exists (with auto-qualification fallback)
+	if err := c.EnsureImage(ctx, image); err != nil {
+		return "", fmt.Errorf("ensuring image: %w", err)
 	}
 
 	// Create spec
@@ -147,21 +226,9 @@ func (c *Client) Run(ctx context.Context, name, image string, ports map[uint16]u
 
 // RunWithMounts creates and starts a container with volume mounts
 func (c *Client) RunWithMounts(ctx context.Context, opts RunOptions) (string, error) {
-	logger.DebugCtx(ctx, "Checking if image exists", "image", opts.Image)
-
-	// Pull image if not exists
-	exists, err := images.Exists(c.ctx, opts.Image, nil)
-	if err != nil {
-		return "", fmt.Errorf("checking image: %w", err)
-	}
-
-	if !exists {
-		logger.InfoCtx(ctx, "Pulling image", "image", opts.Image)
-		_, err = images.Pull(c.ctx, opts.Image, nil)
-		if err != nil {
-			return "", fmt.Errorf("pulling image: %w", err)
-		}
-		logger.DebugCtx(ctx, "Image pulled successfully", "image", opts.Image)
+	// Ensure image exists (with auto-qualification fallback)
+	if err := c.EnsureImage(ctx, opts.Image); err != nil {
+		return "", fmt.Errorf("ensuring image: %w", err)
 	}
 
 	// Create spec

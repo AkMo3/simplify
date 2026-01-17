@@ -14,6 +14,8 @@ export interface Application {
   created_at: string
   updated_at: string
   ip_address?: string
+  proxy_hostname?: string
+  proxy_port?: number
   exposed_ports?: string[]
   connected_networks?: string[]
 }
@@ -49,6 +51,8 @@ export interface CreateApplicationRequest {
   replicas?: number
   pod_id?: string
   network_id?: string
+  proxy_hostname?: string
+  proxy_port?: number
   ports?: Record<string, string>
   env_vars?: Record<string, string>
   health_check?: HealthCheckConfig
@@ -61,6 +65,8 @@ export interface UpdateApplicationRequest {
   replicas?: number
   pod_id?: string
   network_id?: string
+  proxy_hostname?: string
+  proxy_port?: number
   ports?: Record<string, string>
   env_vars?: Record<string, string>
   health_check?: HealthCheckConfig
